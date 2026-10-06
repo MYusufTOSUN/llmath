@@ -83,13 +83,17 @@ def record(session: Session, run: Run, question_text: str, question_id: str | No
 
 
 def summarize(session: Session, run_id: int) -> list[dict]:
-    """Accuracy per model, strategy, subset and language for one run."""
+    """Accuracy per model, strategy, subset and language for one run.
+
+    Calls that failed at the API (quota, outage) are left out: they say nothing about the
+    model and are retried when the run is resumed.
+    """
     rows = session.execute(
         select(Response.model_key, Response.strategy, Question.subset, Question.lang,
                Verification.status, Response.latency_ms, Response.output_tokens, Response.cost_usd)
         .join(Question, Response.question_id == Question.id)
         .join(Verification, Verification.response_id == Response.id)
-        .where(Response.run_id == run_id)
+        .where(Response.run_id == run_id, Response.error.is_(None))
     ).all()
     groups: dict[tuple, list] = defaultdict(list)
     for model_key, strategy, subset, lang, status, latency, tokens, cost in rows:

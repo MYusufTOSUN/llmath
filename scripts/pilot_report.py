@@ -37,7 +37,7 @@ def main() -> None:
             select(Response, Verification, Question)
             .join(Verification, Verification.response_id == Response.id)
             .join(Question, Question.id == Response.question_id)
-            .where(Response.run_id == run.id, Verification.status != "correct")
+            .where(Response.run_id == run.id, Verification.status != "correct", Response.error.is_(None))
             .order_by(Question.id, Response.model_key, Response.strategy)).all()
 
     totals: dict[tuple, list[int]] = defaultdict(lambda: [0, 0])
