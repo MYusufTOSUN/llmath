@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from llmath import __version__
+from llmath.cascade import run_cascade
 from llmath.config import MODELS, PILOT_FILE
 from llmath.dataset import import_questions
 from llmath.db import Question, Response, Run, SessionLocal, Verification, init_db
@@ -120,6 +121,15 @@ def run_summary(run_id: int) -> list[dict]:
         if session.get(Run, run_id) is None:
             raise HTTPException(404, "çalıştırma bulunamadı")
         return summarize(session, run_id)
+
+
+@app.get("/runs/{run_id}/cascade")
+def run_cascade_analysis(run_id: int, cheap: str, strong: str, strong_strategy: str = "cot") -> dict:
+    """Agreement-gated cascade simulated on the run's stored answers (AS2)."""
+    with SessionLocal() as session:
+        if session.get(Run, run_id) is None:
+            raise HTTPException(404, "çalıştırma bulunamadı")
+        return run_cascade(session, run_id, cheap, strong, strong_strategy)
 
 
 @app.get("/runs/{run_id}/responses")

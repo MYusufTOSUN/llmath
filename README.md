@@ -26,6 +26,7 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | Yarıda kalan deneye devam | aynı komutu aynı `--name` ile tekrar çalıştırın |
 | API + arayüz | `.\baslat.ps1` → arayüz http://localhost:8501, API belgeleri http://127.0.0.1:8000/docs |
 | Bir çalıştırmanın Markdown raporu | `python scripts/pilot_report.py --name pilot-1 > outputs/pilot-1.md` |
+| Kademeli çözüm analizi (AS2) | `python -m llmath.cascade --run pilot-1 --cheap qwen3-8b --strong gemini-flash-lite` |
 | Testler | `python -m pytest` |
 | Pilot veri setini yeniden üret | `python scripts/build_pilot_set.py` |
 
@@ -48,6 +49,10 @@ Makine çevirileri elle gözden geçirildi; düzeltmeler gerekçeleriyle birlikt
 3. **Metin eşitliği → sayısal eşitlik → Math-Verify → SymPy** (sabitlerde sayısal, değişkenli ifadelerde rastgele nokta testi).
 
 Her kararın hangi katmanda verildiği veritabanına yazılır; böylece katmanların güvenilirliği insan etiketine göre ölçülebilir.
+
+## Kademeli çözüm (`llmath/cascade.py`)
+
+Ucuz model soruyu hem CoT hem PoT ile çözer. İki cevap uyuşursa kabul edilir, uyuşmazsa soru güçlü modele gönderilir. Analiz kayıtlı cevaplar üzerinde yapılır, ek API çağrısı gerektirmez; doğruluk (Wilson %95 güven aralığı), güçlü model çağrısı sayısı, maliyet ve süre raporlanır, güçlü modelle fark McNemar testiyle sınanır. Pilotta Qwen3 8B → Gemini Flash-Lite kademesi 40 sorunun 37'sini doğru çözdü (güçlü model tek başına 38/40) ve güçlü modeli 40 yerine 15 kez çağırdı.
 
 ## Klasör yapısı
 

@@ -49,6 +49,14 @@ def solution_steps(solution: str) -> list[str]:
     return parts if len(parts) > 1 else [line for line in solution.splitlines() if line.strip()]
 
 
+def wilson_low(correct: int, n: int, z: float = 1.96) -> float:
+    """Lower end of the 95% Wilson interval: ranks 38/40 above 9/9, unlike raw accuracy."""
+    if n == 0:
+        return 0.0
+    p = correct / n
+    return ((p + z * z / (2 * n)) - z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5)) / (1 + z * z / n)
+
+
 def theme_mode() -> str:
     try:
         return "dark" if st.context.theme.type == "dark" else "light"
@@ -169,9 +177,44 @@ def accuracy_chart(overall: pd.DataFrame) -> alt.Chart:
     return (bars + labels).properties(height=70 * overall["model"].nunique() + 40)
 
 
+def show_cascade(run_id: int, overall: pd.DataFrame) -> None:
+    """AS2: accept the cheap model's answer when its CoT and PoT agree, otherwise escalate."""
+    complete = overall.groupby("model")["strategy"].nunique()
+    cheap_options = sorted(complete[complete == 2].index)          # needs both CoT and PoT
+    totals = overall.groupby("model")[["correct", "n"]].sum()
+    by_accuracy = totals.apply(lambda r: wilson_low(r["correct"], r["n"]), axis=1).sort_values()
+    if not cheap_options or len(by_accuracy) < 2:
+        return
+    st.subheader("Kademeli çözüm: CoT ve PoT uyuşmazsa güçlü modele geç")
+    left, right = st.columns(2)
+    weakest = next(m for m in by_accuracy.index if m in cheap_options)
+    cheap = left.selectbox("Ucuz model", cheap_options, index=cheap_options.index(weakest))
+    strong_options = [m for m in reversed(by_accuracy.index) if m != cheap]
+    strong = right.selectbox("Güçlü model", strong_options)
+    result = call("GET", f"/runs/{run_id}/cascade", params={"cheap": cheap, "strong": strong})
+    if not result["n"]:
+        st.info("Bu iki modelin ortak, eksiksiz cevabı olan soru yok.")
+        return
+    table = pd.DataFrame(result["rows"])
+    table["doğruluk"] = (table["doğruluk"] * 100).round(1)
+    table["güven_aralığı"] = table["güven_aralığı"].map(lambda ci: f"%{100 * ci[0]:.0f}–%{100 * ci[1]:.0f}")
+    st.dataframe(table.rename(columns={"yöntem": "Yöntem", "n": "Soru", "doğru": "Doğru", "doğruluk": "Doğruluk (%)",
+                                       "güven_aralığı": "%95 GA", "maliyet_usd": "Maliyet (USD, liste)",
+                                       "ort_süre_sn": "Ort. süre (sn)", "güçlü_model_çağrısı": "Güçlü model çağrısı"}),
+                 hide_index=True)
+    agreement, test = result["agreement"], result["mcnemar"]["güçlü_modele_karşı"]
+    st.caption(f"{agreement['kabul_edilen']} soruda iki strateji uyuştu ve cevap kabul edildi "
+               f"(doğruluk %{100 * agreement['kabul_doğruluğu']:.0f}); {agreement['yükseltilen']} soru güçlü modele "
+               f"gönderildi. Güçlü modele karşı McNemar p = {test['p']:.3f}."
+               + (f" Eksik cevap yüzünden {len(result['missing'])} soru dışarıda kaldı." if result["missing"] else ""))
+    with st.expander("Soru bazında kararlar"):
+        st.dataframe(pd.DataFrame(result["decisions"]), hide_index=True)
+
+
 def page_results() -> None:
     st.header("Deney sonuçları")
     runs = [r for r in call("GET", "/runs") if r["responses"]]
+    runs.sort(key=lambda r: (r["name"] == "etkileşimli", -r["id"]))   # batch experiments first
     if not runs:
         st.info("Henüz sonuç yok. Toplu deney için: `python -m llmath.runner --name pilot-1`")
         return
@@ -183,9 +226,11 @@ def page_results() -> None:
 
     overall = summary.groupby(["model", "strategy"], as_index=False)[["n", "correct", "unparsed"]].sum()
     overall["accuracy"] = overall["correct"] / overall["n"]
-    best = overall.loc[overall["accuracy"].idxmax()]
+    best = overall.loc[overall.apply(lambda r: wilson_low(r["correct"], r["n"]), axis=1).idxmax()]
     st.subheader(f"En yüksek doğruluk: {best['model']}, {STRATEGIES[best['strategy']]} — "
                  f"%{100 * best['accuracy']:.0f} ({best['correct']}/{best['n']})")
+    st.caption("Sıralama, az soruyla elde edilen yüksek oranları öne çıkarmamak için %95 güven aralığının "
+               "alt sınırına göre yapılır.")
     st.altair_chart(accuracy_chart(overall), width="stretch")
     st.dataframe(overall.assign(accuracy=(overall["accuracy"] * 100).round(1))
                  .rename(columns={"model": "Model", "strategy": "Strateji", "n": "Soru", "correct": "Doğru",
@@ -203,6 +248,8 @@ def page_results() -> None:
         table[["tr", "en"]] = (table[["tr", "en"]] * 100).round(1)
         st.dataframe(table.rename(columns={"tr": "Türkçe (%)", "en": "İngilizce (%)"}), hide_index=True)
         st.caption("Pilotta P2 yalnızca 10 soru çifti içerir; farklar istatistiksel olarak anlamlı sayılmamalı.")
+
+    show_cascade(run["id"], overall)
 
     st.subheader("Yanlış ve doğrulanamayan cevaplar")
     responses = pd.DataFrame(call("GET", f"/runs/{run['id']}/responses"))
