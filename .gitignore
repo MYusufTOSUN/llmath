@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Gizli anahtarlar: asla depoya girmez
+.env
+
+# Yerel veritabanı ve deney çıktıları
+*.db
+*.db-journal
+outputs/
+
+# Editör / işletim sistemi
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

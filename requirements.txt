@@ -1,0 +1,19 @@
+# Çekirdek
+sympy
+math-verify[antlr4_13_2]
+sqlalchemy>=2.0
+python-dotenv
+httpx
+
+# LLM erişimi (bulut sağlayıcılar); tenacity LiteLLM'in yeniden deneme mekanizması için gerekli
+litellm
+tenacity
+
+# Servis ve arayüz
+fastapi
+uvicorn[standard]
+streamlit
+pandas
+
+# Test
+pytest

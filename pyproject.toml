@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llmath"
+version = "0.1.0"
+description = "Türkçe matematik sorularında LLM çözümü ve katmanlı cevap doğrulama"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "M. Yusuf Tosun" }]
+
+[tool.setuptools.packages.find]
+include = ["llmath*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

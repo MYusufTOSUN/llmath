@@ -1,0 +1,233 @@
+"""LLMath arayüzü (Streamlit).
+
+Çalıştırma: önce API (python -m uvicorn api.main:app), sonra streamlit run ui/app.py
+"""
+
+from __future__ import annotations
+
+import os
+import re
+
+import altair as alt
+import httpx
+import pandas as pd
+import streamlit as st
+
+API_URL = os.getenv("LLMATH_API_URL", "http://127.0.0.1:8000")
+STRATEGIES = {"cot": "Adım adım (CoT)", "pot": "SymPy kodu (PoT)"}
+STATUS = {"correct": ("✅", "Doğru"), "incorrect": ("❌", "Yanlış"), "unparsed": ("⚠️", "Doğrulanamadı")}
+# Categorical slots 1-2 of the reference palette, validated for light and dark surfaces.
+SERIES = {"light": ("#2a78d6", "#eb6834"), "dark": ("#3987e5", "#d95926")}
+
+st.set_page_config(page_title="LLMath", page_icon="∑", layout="wide")
+
+
+def call(method: str, path: str, **kwargs):
+    try:
+        response = httpx.request(method, API_URL + path, timeout=900, **kwargs)
+    except httpx.HTTPError as exc:
+        st.error(f"API'ye ulaşılamadı ({API_URL}). Önce `python -m uvicorn api.main:app` ile başlatın.\n\n{exc}")
+        st.stop()
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("detail", response.text)
+        except ValueError:
+            detail = response.text
+        st.error(f"API hatası ({response.status_code}): {detail}")
+        st.stop()
+    return response.json()
+
+
+def as_markdown(text: str) -> str:
+    """Streamlit renders $...$ and $$...$$, but models often write \\( \\) and \\[ \\]."""
+    text = re.sub(r"\\\[(.+?)\\\]", lambda m: "$$" + m.group(1) + "$$", text, flags=re.DOTALL)
+    return re.sub(r"\\\((.+?)\\\)", lambda m: "$" + m.group(1) + "$", text, flags=re.DOTALL)
+
+
+def solution_steps(solution: str) -> list[str]:
+    parts = [p.strip() for p in re.split(r"\n\s*\n", solution) if p.strip()]
+    return parts if len(parts) > 1 else [line for line in solution.splitlines() if line.strip()]
+
+
+def theme_mode() -> str:
+    try:
+        return "dark" if st.context.theme.type == "dark" else "light"
+    except AttributeError:
+        return "light"
+
+
+# --- Soru çöz --------------------------------------------------------------------------------
+
+def page_solve() -> None:
+    st.header("Soru çöz")
+    models = call("GET", "/models")
+    available = {m["key"]: m["label"] for m in models if m["available"]}
+    with st.sidebar:
+        st.subheader("Modeller")
+        for m in models:
+            note = "" if m["available"] else f" — {m['reason']}"
+            st.caption(("● " if m["available"] else "○ ") + m["label"] + note)
+    if not available:
+        st.warning("Kullanılabilir model yok. Ollama'yı başlatın ya da .env dosyasına API anahtarı ekleyin.")
+        return
+
+    mode = st.radio("Soru kaynağı", ["Pilot setinden seç", "Kendi sorunu yaz"], horizontal=True)
+    if mode == "Pilot setinden seç":
+        questions = call("GET", "/questions")
+        left, right = st.columns([1, 4])
+        subset = left.selectbox("Alt küme", sorted({q["subset"] for q in questions}))
+        pool = [q for q in questions if q["subset"] == subset]
+        question = right.selectbox("Soru", pool, format_func=lambda q: f"{q['id']} · {q['text'][:80]}")
+        st.markdown(as_markdown(question["text"]))
+        st.caption(f"Kaynak: {question['source']}")
+        payload: dict = {"question_id": question["id"]}
+        ready = True
+    else:
+        text = st.text_area("Soru metni", height=140)
+        left, right = st.columns(2)
+        gold = left.text_input("Beklenen cevap (isteğe bağlı; girilirse doğrulanır)")
+        lang = right.selectbox("Dil", ["tr", "en"])
+        payload = {"text": text, "gold": gold or None, "lang": lang}
+        ready = bool(text.strip())
+
+    left, right = st.columns(2)
+    model_key = left.selectbox("Model", list(available), format_func=available.get)
+    strategy = right.radio("Strateji", list(STRATEGIES), format_func=STRATEGIES.get, horizontal=True)
+    if st.button("Çöz", type="primary", disabled=not ready):
+        with st.spinner("Model çözüyor; yerel modelde ilk çağrı birkaç dakika sürebilir..."):
+            st.session_state.result = call("POST", "/solve",
+                                           json={**payload, "model_key": model_key, "strategy": strategy})
+            st.session_state.step = 1
+    if st.session_state.get("result"):
+        show_result(st.session_state.result)
+
+
+def show_result(result: dict) -> None:
+    st.divider()
+    if result.get("error"):
+        st.error(result["error"])
+        return
+    verdict = result.get("verdict")
+    icon, label = STATUS.get(verdict["status"], ("•", "?")) if verdict else ("•", "Beklenen cevap yok")
+    cols = st.columns(4)
+    cols[0].metric("Sonuç", f"{icon} {label}")
+    cols[1].metric("Model cevabı", result.get("answer") or "—")
+    cols[2].metric("Beklenen", result.get("gold") or "—")
+    cols[3].metric("Süre", f"{result['latency_ms'] / 1000:.1f} sn" if result.get("latency_ms") else "—")
+    if verdict:
+        extra = " · sayı biçimi belirsizdi (Türkçe/İngilizce yazım)" if verdict.get("ambiguous_format") else ""
+        st.caption(f"Doğrulama katmanı: {verdict['layer']} · {verdict['detail']}{extra}")
+
+    solution = result.get("solution") or ""
+    if result.get("code"):
+        st.subheader("Modelin yazdığı kod")
+        st.code(result["code"], language="python")
+        st.text("Program çıktısı:\n" + (result.get("exec_stdout") or "(boş)"))
+        if result.get("exec_error"):
+            st.warning(result["exec_error"])
+    else:
+        st.subheader("Çözüm")
+        steps = solution_steps(solution)
+        if st.toggle("İpucu modu: çözümü adım adım aç") and steps:
+            shown = min(st.session_state.get("step", 1), len(steps))
+            for part in steps[:shown]:
+                st.markdown(as_markdown(part))
+            if shown < len(steps) and st.button(f"Sonraki adım ({shown}/{len(steps)})"):
+                st.session_state.step = shown + 1
+                st.rerun()
+        else:
+            st.markdown(as_markdown(solution))
+    with st.expander("Ham model çıktısı"):
+        st.text(solution)
+    if result.get("reasoning"):
+        with st.expander("Modelin düşünme metni"):
+            st.text(result["reasoning"])
+
+
+# --- Sonuçlar --------------------------------------------------------------------------------
+
+def accuracy_chart(overall: pd.DataFrame) -> alt.Chart:
+    names = list(STRATEGIES.values())
+    data = overall.assign(
+        strateji=overall["strategy"].map(STRATEGIES),
+        dogruluk=(overall["accuracy"] * 100).round(1),
+        etiket=(overall["accuracy"] * 100).round(0).astype(int).astype(str) + "% (" +
+        overall["correct"].astype(str) + "/" + overall["n"].astype(str) + ")",
+    )
+    base = alt.Chart(data).encode(
+        y=alt.Y("model:N", title=None),
+        yOffset=alt.YOffset("strateji:N", sort=names, scale=alt.Scale(paddingInner=0.15)),
+        x=alt.X("dogruluk:Q", title="Doğruluk (%)", scale=alt.Scale(domain=[0, 100])),
+        tooltip=[alt.Tooltip("model:N", title="Model"), alt.Tooltip("strateji:N", title="Strateji"),
+                 alt.Tooltip("dogruluk:Q", title="Doğruluk (%)"), alt.Tooltip("correct:Q", title="Doğru"),
+                 alt.Tooltip("n:Q", title="Soru"), alt.Tooltip("unparsed:Q", title="Doğrulanamayan")],
+    )
+    bars = base.mark_bar(cornerRadiusEnd=4).encode(
+        color=alt.Color("strateji:N", scale=alt.Scale(domain=names, range=list(SERIES[theme_mode()])),
+                        legend=alt.Legend(title=None, orient="top")))
+    labels = base.mark_text(align="left", dx=6).encode(text="etiket:N")
+    return (bars + labels).properties(height=70 * overall["model"].nunique() + 40)
+
+
+def page_results() -> None:
+    st.header("Deney sonuçları")
+    runs = [r for r in call("GET", "/runs") if r["responses"]]
+    if not runs:
+        st.info("Henüz sonuç yok. Toplu deney için: `python -m llmath.runner --name pilot-1`")
+        return
+    run = st.selectbox("Çalıştırma", runs, format_func=lambda r: f"#{r['id']} · {r['name']} · {r['responses']} yanıt")
+    summary = pd.DataFrame(call("GET", f"/runs/{run['id']}/summary"))
+    if summary.empty:
+        st.info("Bu çalıştırmada soru setine bağlı, doğrulanmış yanıt yok.")
+        return
+
+    overall = summary.groupby(["model", "strategy"], as_index=False)[["n", "correct", "unparsed"]].sum()
+    overall["accuracy"] = overall["correct"] / overall["n"]
+    best = overall.loc[overall["accuracy"].idxmax()]
+    st.subheader(f"En yüksek doğruluk: {best['model']}, {STRATEGIES[best['strategy']]} — "
+                 f"%{100 * best['accuracy']:.0f} ({best['correct']}/{best['n']})")
+    st.altair_chart(accuracy_chart(overall), width="stretch")
+    st.dataframe(overall.assign(accuracy=(overall["accuracy"] * 100).round(1))
+                 .rename(columns={"model": "Model", "strategy": "Strateji", "n": "Soru", "correct": "Doğru",
+                                  "unparsed": "Doğrulanamayan", "accuracy": "Doğruluk (%)"}),
+                 hide_index=True)
+
+    st.subheader("Alt küme ve dile göre")
+    st.dataframe(summary.assign(accuracy=(summary["accuracy"] * 100).round(1)), hide_index=True)
+
+    paired = summary[summary["subset"] == "P2"]
+    if {"tr", "en"} <= set(paired["lang"]):
+        st.subheader("Aynı sorular Türkçe ve İngilizce (P2)")
+        table = paired.pivot_table(index=["model", "strategy"], columns="lang", values="accuracy").reset_index()
+        table["fark (puan)"] = ((table["tr"] - table["en"]) * 100).round(1)
+        table[["tr", "en"]] = (table[["tr", "en"]] * 100).round(1)
+        st.dataframe(table.rename(columns={"tr": "Türkçe (%)", "en": "İngilizce (%)"}), hide_index=True)
+        st.caption("Pilotta P2 yalnızca 10 soru çifti içerir; farklar istatistiksel olarak anlamlı sayılmamalı.")
+
+    st.subheader("Yanlış ve doğrulanamayan cevaplar")
+    responses = pd.DataFrame(call("GET", f"/runs/{run['id']}/responses"))
+    wrong = responses[responses["status"] != "correct"]
+    if wrong.empty:
+        st.success("Bu çalıştırmada yanlış cevap yok.")
+    else:
+        st.dataframe(wrong[["question_id", "model", "strategy", "gold", "answer", "status", "layer", "detail"]],
+                     hide_index=True)
+        for _, row in wrong.iterrows():
+            with st.expander(f"{row['question_id']} · {row['model']} · {row['strategy']} · {row['status']}"):
+                st.markdown(as_markdown(row["question"] or ""))
+                st.markdown(f"**Beklenen:** {row['gold']} · **Model:** {row['answer']} · {row['detail']}")
+                if row.get("code"):
+                    st.code(row["code"], language="python")
+                if row.get("exec_error"):
+                    st.warning(row["exec_error"])
+                st.text(row["solution"] or "")
+    st.download_button("Tüm yanıtları CSV olarak indir", responses.to_csv(index=False).encode("utf-8"),
+                       file_name=f"llmath_calistirma_{run['id']}.csv", mime="text/csv")
+
+
+page = st.sidebar.radio("Sayfa", ["Soru çöz", "Deney sonuçları"])
+st.sidebar.caption(f"API: {API_URL}")
+if page == "Soru çöz":
+    page_solve()
+else:
+    page_results()
