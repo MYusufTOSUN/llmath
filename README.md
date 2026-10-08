@@ -29,6 +29,7 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | Kademeli çözüm analizi (AS2) | `python -m llmath.cascade --run pilot-1 --cheap qwen3-8b --strong gemini-flash-lite` |
 | Testler | `python -m pytest` |
 | Pilot veri setini yeniden üret | `python scripts/build_pilot_set.py` |
+| Ana veri setini yeniden üret | `python scripts/build_main_set.py` (inceleme listesi: `outputs/main_v1_review.md`) |
 
 Kullanılabilir model anahtarları `llmath/config.py` içindeki `MODELS` sözlüğündedir: `qwen3-8b`, `qwen3-8b-think`, `llama3.1-8b`, `gemini-flash-lite`, `gemini-flash`. Ollama modelleri indirilmişse, bulut modelleri ise `.env` içinde anahtarı varsa kullanılabilir.
 
@@ -41,6 +42,16 @@ Kullanılabilir model anahtarları `llmath/config.py` içindeki `MODELS` sözlü
 | P3 | 10 taze Türkçe şablon sorusu (LGS/YKS tarzı); cevaplar SymPy ile hesaplanır | Bu proje, CC BY 4.0 |
 
 Makine çevirileri elle gözden geçirildi; düzeltmeler gerekçeleriyle birlikte `scripts/build_pilot_set.py` içinde (`CORRECTIONS`, `EXCLUDE`) ve her sorunun `note` alanında kayıtlıdır. Örnek: GSM8K-TR'deki bir sorunun cevap anahtarı hatalıydı (600 yerine 550).
+
+## Ana veri seti (`data/main_v1.jsonl`, 500 öğe)
+
+| Alt küme | İçerik | Kaynak ve lisans |
+| --- | --- | --- |
+| P1 | 120 GSM8K test problemi, Türkçe + İngilizce paralel (240 öğe) | [GSM8K](https://huggingface.co/datasets/openai/gsm8k) ve GSM8K-TR, MIT |
+| P2 | 80 MATH-500 problemi, Türkçe + İngilizce paralel (160 öğe); konu ve zorluk düzeyi MATH-500'den | MCLM MT-MATH100, MIT |
+| P3 | 100 taze Türkçe şablon sorusu (20 şablon × 5) | Bu proje, CC BY 4.0 |
+
+Pilotta kullanılan sorular ana sete alınmadı. GSM8K-TR yerelleştirilmiş bir çeviridir: bazı sorularda sayılar değişmiş, bazılarında cevap anahtarı hatalı. Bu yüzden P1'e yalnızca sayıları ve cevabı İngilizce aslıyla birebir eşleşen sorular alındı (1319 test sorusundan 641'i), cevap anahtarı da İngilizce asıldan gelir. P1'in Türkçe metinlerinde ondalık ayırıcı virgül, binlik ayırıcı noktadır (2,74; 1.250). P2 metinleri LaTeX olduğu için formüllerdeki sayılar kaynaktaki gibi bırakıldı. Otomatik kontrollerin işaretlediği 24 öğe elle incelendi. Kararlar `scripts/build_main_set.py` içinde kayıtlıdır (`CORRECTIONS`, `CHECKED`, `EXCLUDE`): üç soruda çeviride kaybolan şekil geri kondu, iki soruda metin düzeltildi.
 
 ## Doğrulama katmanları (`llmath/verify.py`)
 
