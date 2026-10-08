@@ -16,6 +16,8 @@ import streamlit as st
 API_URL = os.getenv("LLMATH_API_URL", "http://127.0.0.1:8000")
 STRATEGIES = {"cot": "Adım adım (CoT)", "pot": "SymPy kodu (PoT)"}
 STATUS = {"correct": ("✅", "Doğru"), "incorrect": ("❌", "Yanlış"), "unparsed": ("⚠️", "Doğrulanamadı")}
+INTERACTIVE_RUN = "etkileşimli"
+ANNOTATION_TARGET = 150   # human labels planned for the agreement (kappa) check with the LLM judge
 # Categorical slots 1-2 of the reference palette, validated for light and dark surfaces.
 SERIES = {"light": ("#2a78d6", "#eb6834"), "dark": ("#3987e5", "#d95926")}
 
@@ -214,7 +216,7 @@ def show_cascade(run_id: int, overall: pd.DataFrame) -> None:
 def page_results() -> None:
     st.header("Deney sonuçları")
     runs = [r for r in call("GET", "/runs") if r["responses"]]
-    runs.sort(key=lambda r: (r["name"] == "etkileşimli", -r["id"]))   # batch experiments first
+    runs.sort(key=lambda r: (r["name"] == INTERACTIVE_RUN, -r["id"]))   # batch experiments first
     if not runs:
         st.info("Henüz sonuç yok. Toplu deney için: `python -m llmath.runner --name pilot-1`")
         return
@@ -240,14 +242,20 @@ def page_results() -> None:
     st.subheader("Alt küme ve dile göre")
     st.dataframe(summary.assign(accuracy=(summary["accuracy"] * 100).round(1)), hide_index=True)
 
-    paired = summary[summary["subset"] == "P2"]
-    if {"tr", "en"} <= set(paired["lang"]):
-        st.subheader("Aynı sorular Türkçe ve İngilizce (P2)")
-        table = paired.pivot_table(index=["model", "strategy"], columns="lang", values="accuracy").reset_index()
-        table["fark (puan)"] = ((table["tr"] - table["en"]) * 100).round(1)
-        table[["tr", "en"]] = (table[["tr", "en"]] * 100).round(1)
-        st.dataframe(table.rename(columns={"tr": "Türkçe (%)", "en": "İngilizce (%)"}), hide_index=True)
-        st.caption("Pilotta P2 yalnızca 10 soru çifti içerir; farklar istatistiksel olarak anlamlı sayılmamalı.")
+    bilingual = [subset for subset, langs in summary.groupby("subset")["lang"].agg(set).items()
+                 if {"tr", "en"} <= langs]
+    if bilingual:
+        st.subheader("Aynı sorular Türkçe ve İngilizce")
+        paired = summary[summary["subset"].isin(bilingual)]
+        table = paired.pivot_table(index=["model", "strategy", "subset"], columns="lang",
+                                   values=["accuracy", "n"]).reset_index()
+        table.columns = [f"{a}_{b}" if b else a for a, b in table.columns]
+        table["fark (puan)"] = ((table["accuracy_tr"] - table["accuracy_en"]) * 100).round(1)
+        table[["accuracy_tr", "accuracy_en"]] = (table[["accuracy_tr", "accuracy_en"]] * 100).round(1)
+        st.dataframe(table.rename(columns={"accuracy_tr": "Türkçe (%)", "accuracy_en": "İngilizce (%)",
+                                           "n_tr": "Türkçe soru", "n_en": "İngilizce soru"}), hide_index=True)
+        st.caption("Eşleştirilmiş karşılaştırma ve McNemar testi `scripts/report.py` raporundadır; "
+                   "30'dan az soruda farklar anlamlı sayılmamalı.")
 
     show_cascade(run["id"], overall)
 
@@ -259,7 +267,9 @@ def page_results() -> None:
     else:
         st.dataframe(wrong[["question_id", "model", "strategy", "gold", "answer", "status", "layer", "detail"]],
                      hide_index=True)
-        for _, row in wrong.iterrows():
+        if len(wrong) > 50:
+            st.caption(f"Ayrıntısı ilk 50 cevabın gösteriliyor; {len(wrong)} cevabın tamamı tabloda ve CSV'de.")
+        for _, row in wrong.head(50).iterrows():
             with st.expander(f"{row['question_id']} · {row['model']} · {row['strategy']} · {row['status']}"):
                 st.markdown(as_markdown(row["question"] or ""))
                 st.markdown(f"**Beklenen:** {row['gold']} · **Model:** {row['answer']} · {row['detail']}")
@@ -272,9 +282,100 @@ def page_results() -> None:
                        file_name=f"llmath_calistirma_{run['id']}.csv", mime="text/csv")
 
 
-page = st.sidebar.radio("Sayfa", ["Soru çöz", "Deney sonuçları"])
+# --- Hata etiketleme -------------------------------------------------------------------------
+
+def page_annotate() -> None:
+    st.header("Hata etiketleme")
+    taxonomy = call("GET", "/taxonomy")
+    types = {t["code"]: t for t in taxonomy["types"]}
+    stages = {s["key"]: s for s in taxonomy["stages"]}
+    with st.expander("Kod kitabı"):
+        st.dataframe(pd.DataFrame([{"Kod": t["code"], "Tür": t["name"],
+                                    "Olağan aşama": stages[t["stage"]]["name"] if t["stage"] else "—",
+                                    "Tanım": t["definition"], "Örnek": t["example"]} for t in types.values()]),
+                     hide_index=True)
+        for s in stages.values():
+            st.markdown(f"**{s['name']}:** {s['definition']}")
+    st.caption("Her yanlış cevapta ilk hatalı adımı bulun, hatanın türünü ve doğduğu Newman aşamasını seçin. "
+               "Cevaplar sabit bir rastgele sırayla gelir; başka etiketleyicilerin ve LLM-hakemin etiketleri "
+               "gösterilmez.")
+
+    runs = [r for r in call("GET", "/runs") if r["responses"] and r["name"] != INTERACTIVE_RUN]
+    if not runs:
+        st.info("Etiketlenecek toplu deney yok.")
+        return
+    left, middle, right = st.columns([2, 1, 1])
+    run = left.selectbox("Çalıştırma", runs, format_func=lambda r: f"#{r['id']} · {r['name']}")
+    annotator = middle.text_input("Etiketleyen", value="human",
+                                  help="İkinci bir etiketleyici kendi adını yazar; uyum etiketleyenler "
+                                       "arasında ölçülür.")
+    models = sorted({row["model"] for row in call("GET", f"/runs/{run['id']}/summary")})
+    model = right.selectbox("Model", ["(hepsi)"] + models)
+    skipped: list[int] = st.session_state.setdefault("skipped", [])
+    params = {"annotator": annotator, "skip": ",".join(map(str, skipped))}
+    if model != "(hepsi)":
+        params["model"] = model
+    data = call("GET", f"/runs/{run['id']}/annotation/next", params=params)
+    st.progress(min(data["done"] / ANNOTATION_TARGET, 1.0),
+                text=f"{data['done']} cevap etiketlendi (hedef en az {ANNOTATION_TARGET}) · {data['remaining']} kaldı")
+    item = data["item"]
+    if item is None:
+        st.success("Bu seçimde etiketlenecek yanlış cevap kalmadı.")
+        if skipped and st.button(f"Atlanan {len(skipped)} cevabı geri getir"):
+            skipped.clear()
+            st.rerun()
+        return
+
+    rid = item["response_id"]
+    st.subheader(f"{item['question_id']} · {item['model']} · {STRATEGIES[item['strategy']]}")
+    st.markdown(as_markdown(item["question"]))
+    cols = st.columns(3)
+    cols[0].metric("Beklenen", item["gold"])
+    cols[1].metric("Model cevabı", item["answer"] or "—")
+    cols[2].metric("Doğrulayıcı", STATUS[item["status"]][1], item["layer"], delta_color="off")
+    if item["finish_reason"] == "length":
+        st.warning("Çıktı token sınırında kesilmiş: H13 adayı.")
+    if item["code"]:
+        st.code(item["code"], language="python", line_numbers=True)
+        st.text("Program çıktısı:\n" + (item["exec_stdout"] or "(boş)"))
+        if item["exec_error"]:
+            st.warning(item["exec_error"])
+        step_count, step_label = item["code"].count("\n") + 1, "İlk hatalı kod satırı"
+    else:
+        steps = solution_steps(item["solution"] or "")
+        for number, part in enumerate(steps, start=1):
+            st.markdown(f"**{number}.** " + as_markdown(part))
+        step_count, step_label = len(steps), "İlk hatalı adım"
+
+    st.divider()
+    code = st.selectbox("Hata türü", list(types), index=None, placeholder="Hata türünü seçin", key=f"type-{rid}",
+                        format_func=lambda c: f"{c} · {types[c]['name']}")
+    stage = None
+    if code:
+        st.caption(f"{types[code]['definition']} Örnek: {types[code]['example']}")
+        if types[code]["stage"]:
+            keys = list(stages)
+            stage = st.radio("Newman aşaması (hatanın doğduğu yer)", keys, index=keys.index(types[code]["stage"]),
+                             format_func=lambda k: stages[k]["name"], horizontal=True, key=f"stage-{rid}-{code}")
+    step = st.number_input(f"{step_label} (0 = belirlenemedi)", min_value=0, max_value=max(step_count, 1),
+                           value=0, key=f"step-{rid}")
+    note = st.text_input("Not (isteğe bağlı)", key=f"note-{rid}")
+    left, right = st.columns([1, 6])
+    if left.button("Kaydet", type="primary", disabled=code is None):
+        call("POST", "/annotations", json={"response_id": rid, "annotator": annotator, "error_type": code,
+                                           "newman_stage": stage, "first_error_step": step or None,
+                                           "note": note or None})
+        st.rerun()
+    if right.button("Atla"):
+        skipped.append(rid)
+        st.rerun()
+
+
+page = st.sidebar.radio("Sayfa", ["Soru çöz", "Deney sonuçları", "Hata etiketleme"])
 st.sidebar.caption(f"API: {API_URL}")
 if page == "Soru çöz":
     page_solve()
-else:
+elif page == "Deney sonuçları":
     page_results()
+else:
+    page_annotate()

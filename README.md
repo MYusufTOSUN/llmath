@@ -29,6 +29,7 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | Bir çalıştırmanın Markdown raporu | `python scripts/report.py --name main-1 --cascade qwen3-8b gemini-flash-lite --out outputs/main-1.md` |
 | Kademeli çözüm analizi (AS2) | `python -m llmath.cascade --run pilot-1 --cheap qwen3-8b --strong gemini-flash-lite` |
 | Testler | `python -m pytest` |
+| Hata etiketleme kod kitabı | `python -m llmath.taxonomy` |
 | Pilot veri setini yeniden üret | `python scripts/build_pilot_set.py` |
 | Ana veri setini yeniden üret | `python scripts/build_main_set.py` (inceleme listesi: `outputs/main_v1_review.md`) |
 
@@ -68,13 +69,20 @@ Her kararın hangi katmanda verildiği veritabanına yazılır; böylece katmanl
 
 Ucuz model soruyu hem CoT hem PoT ile çözer. İki cevap uyuşursa kabul edilir, uyuşmazsa soru güçlü modele gönderilir. Analiz kayıtlı cevaplar üzerinde yapılır, ek API çağrısı gerektirmez; doğruluk (Wilson %95 güven aralığı), güçlü model çağrısı sayısı, maliyet ve süre raporlanır, güçlü modelle fark McNemar testiyle sınanır. Pilotta Qwen3 8B → Gemini Flash-Lite kademesi 40 sorunun 37'sini doğru çözdü (güçlü model tek başına 38/40) ve güçlü modeli 40 yerine 15 kez çağırdı.
 
+## Hata etiketleme (`llmath/taxonomy.py`)
+
+Her yanlış cevapta ilk hatalı adım bulunur. Ardından iki etiket verilir: hatanın doğduğu Newman aşaması (okuma, anlama, dönüştürme, işlem, kodlama) ve 13 hata türünden biri. H1–H9 Li vd. (2024)'ten alındı; H10–H13 bu projede eklendi, H10 Türkçeye özgüdür (Türkçe ifadeyi ya da sayı yazımını yanlış okuma). İki ölçüm etiketi model hatası sayılmaz: Y1 "cevap aslında doğru" doğrulayıcının yanlış negatiflerini, Y2 "soru ya da cevap anahtarı hatalı" veri hatalarını kaydeder. Her türün tanımı ve Türkçe örneği kod kitabındadır (`python -m llmath.taxonomy`).
+
+Etiketleme arayüzün **Hata etiketleme** sayfasından yapılır. Yanlış cevaplar sabit bir rastgele sırayla gelir, böylece ilk N etiket rastgele bir örneklem olur. Başka etiketleyicilerin ve LLM-hakemin etiketleri gösterilmez. Plan, LLM-hakemin bütün yanlışlara ön etiket vermesi ve en az 150 insan etiketiyle uyumun kappa ile ölçülmesidir; LLM-hakem henüz eklenmedi.
+
 ## Klasör yapısı
 
 ```
-llmath/     çekirdek: ayarlar, LLM erişimi, istemler, çözücü, çıkarım, normalleştirme, doğrulama, sandbox, veritabanı
+llmath/     çekirdek: ayarlar, LLM erişimi, istemler, çözücü, çıkarım, normalleştirme, doğrulama, sandbox,
+            veritabanı, hata taksonomisi
 api/        FastAPI servisi
-ui/         Streamlit arayüzü
-scripts/    veri seti üretimi
+ui/         Streamlit arayüzü (soru çözme, sonuçlar, hata etiketleme)
+scripts/    veri seti üretimi, çalıştırma raporu
 data/       soru setleri (JSONL)
 tests/      birim testleri
 ```

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import MODELS, ModelSpec, has_api_key
-from .db import Question, Response, Run, Verification
+from .db import Annotation, Question, Response, Run, Verification
 from .llm import ollama_models
 from .prompts import PROMPT_VERSION
 from .solver import SolveResult, solve
@@ -81,6 +82,50 @@ def record(session: Session, run: Run, question_text: str, question_id: str | No
                                  detail=verdict.detail, ambiguous_format=verdict.ambiguous_format,
                                  normalized=verdict.normalized))
     return row
+
+
+def next_to_annotate(session: Session, run_id: int, annotator: str, model: str | None = None,
+                     skip: frozenset[int] = frozenset()) -> dict:
+    """The next wrong or unverified answer this annotator has not labelled yet.
+
+    Answers come in a fixed pseudo-random order, so a sample of the first N labelled answers is a
+    random sample of the run's errors; other annotators' labels are never shown (blind labelling).
+    """
+    query = (select(Response, Verification, Question)
+             .join(Verification, Verification.response_id == Response.id)
+             .join(Question, Question.id == Response.question_id)
+             .where(Response.run_id == run_id, Response.error.is_(None), Verification.status != "correct"))
+    if model:
+        query = query.where(Response.model_key == model)
+    rows = session.execute(query).all()
+    labelled = set(session.scalars(select(Annotation.response_id).where(Annotation.annotator == annotator)))
+    todo = [row for row in rows if row[0].id not in labelled]
+    todo.sort(key=lambda row: hashlib.sha256(f"{run_id}:{row[0].id}".encode()).hexdigest())
+    pending = [row for row in todo if row[0].id not in skip]
+    item = None
+    if pending:
+        response, verification, question = pending[0]
+        item = {"response_id": response.id, "question_id": question.id, "subset": question.subset,
+                "lang": question.lang, "model": response.model_key, "strategy": response.strategy,
+                "question": question.text, "gold": question.gold, "answer": response.extracted_answer,
+                "status": verification.status, "layer": verification.layer, "detail": verification.detail,
+                "solution": response.raw_output, "code": response.code, "exec_stdout": response.exec_stdout,
+                "exec_error": response.exec_error, "finish_reason": response.finish_reason}
+    return {"done": len(rows) - len(todo), "remaining": len(todo), "item": item}
+
+
+def save_annotation(session: Session, response_id: int, annotator: str, error_type: str,
+                    newman_stage: str | None, first_error_step: int | None, note: str | None) -> Annotation:
+    """One label per answer and annotator; saving again replaces the earlier label."""
+    annotation = session.scalars(select(Annotation).where(Annotation.response_id == response_id,
+                                                          Annotation.annotator == annotator)).first()
+    if annotation is None:
+        annotation = Annotation(response_id=response_id, annotator=annotator)
+        session.add(annotation)
+    annotation.error_type, annotation.newman_stage = error_type, newman_stage
+    annotation.first_error_step, annotation.note = first_error_step, note
+    session.flush()
+    return annotation
 
 
 def summarize(session: Session, run_id: int) -> list[dict]:

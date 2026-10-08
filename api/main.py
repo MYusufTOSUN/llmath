@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -16,7 +17,9 @@ from llmath.cascade import run_cascade
 from llmath.config import MODELS, PILOT_FILE
 from llmath.dataset import import_questions
 from llmath.db import Question, Response, Run, SessionLocal, Verification, init_db
-from llmath.service import available_models, get_or_create_run, model_status, record, solve_and_verify, summarize
+from llmath.service import (available_models, get_or_create_run, model_status, next_to_annotate, record,
+                            save_annotation, solve_and_verify, summarize)
+from llmath.taxonomy import ERROR_TYPES, MEASUREMENT_CODES, NEWMAN_STAGES
 
 INTERACTIVE_RUN = "etkileşimli"
 
@@ -39,6 +42,15 @@ class SolveRequest(BaseModel):
     text: str | None = None
     gold: str | None = None
     lang: str = "tr"
+
+
+class AnnotationRequest(BaseModel):
+    response_id: int
+    annotator: str = Field(default="human", min_length=1, max_length=64)
+    error_type: str
+    newman_stage: str | None = None
+    first_error_step: int | None = Field(default=None, ge=0)   # CoT step or PoT code line; 0 = unclear
+    note: str | None = None
 
 
 @app.get("/health")
@@ -130,6 +142,39 @@ def run_cascade_analysis(run_id: int, cheap: str, strong: str, strong_strategy: 
         if session.get(Run, run_id) is None:
             raise HTTPException(404, "çalıştırma bulunamadı")
         return run_cascade(session, run_id, cheap, strong, strong_strategy)
+
+
+@app.get("/taxonomy")
+def taxonomy() -> dict:
+    return {"stages": [{"key": key, "name": name, "definition": definition}
+                       for key, (name, definition) in NEWMAN_STAGES.items()],
+            "types": [asdict(t) for t in ERROR_TYPES.values()]}
+
+
+@app.get("/runs/{run_id}/annotation/next")
+def annotation_next(run_id: int, annotator: str = "human", model: str | None = None, skip: str = "") -> dict:
+    """Next wrong answer to label; labels by other annotators are never returned (blind labelling)."""
+    skipped = frozenset(int(part) for part in skip.split(",") if part.strip().isdigit())
+    with SessionLocal() as session:
+        if session.get(Run, run_id) is None:
+            raise HTTPException(404, "çalıştırma bulunamadı")
+        return next_to_annotate(session, run_id, annotator, model, skipped)
+
+
+@app.post("/annotations")
+def annotate(request: AnnotationRequest) -> dict:
+    if request.error_type not in ERROR_TYPES:
+        raise HTTPException(422, f"bilinmeyen hata türü: {request.error_type}")
+    if request.newman_stage is not None and request.newman_stage not in NEWMAN_STAGES:
+        raise HTTPException(422, f"bilinmeyen Newman aşaması: {request.newman_stage}")
+    stage = None if request.error_type in MEASUREMENT_CODES else request.newman_stage   # not a model error
+    with SessionLocal() as session:
+        if session.get(Response, request.response_id) is None:
+            raise HTTPException(404, "yanıt bulunamadı")
+        annotation = save_annotation(session, request.response_id, request.annotator, request.error_type,
+                                     stage, request.first_error_step, request.note)
+        session.commit()
+        return {"id": annotation.id}
 
 
 @app.get("/runs/{run_id}/responses")
