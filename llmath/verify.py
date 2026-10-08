@@ -70,7 +70,8 @@ def verify(gold: str, pred: str | None, answer_type: str | None = None) -> Verdi
 
 # --- safety and numbers ------------------------------------------------------------------
 
-_UNSAFE = re.compile(r"__|[`'\";@$]|\b(?:import|lambda|exec|eval|open|os|sys|subprocess|globals)\b")
+# a word after a backslash is a LaTeX command (\lambda), which only reaches LaTeX parsers
+_UNSAFE = re.compile(r"__|[`'\";@$]|(?<!\\)\b(?:import|lambda|exec|eval|open|os|sys|subprocess|globals)\b")
 _DECIMAL = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 _LATEX_FRACTION = re.compile(r"^(-?)\\frac\{(-?[\d.]+)\}\{(-?[\d.]+)\}$")
 _RELATIVE_TOLERANCE = Fraction(1, 10**9)

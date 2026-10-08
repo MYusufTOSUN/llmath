@@ -16,7 +16,7 @@ import io
 import random
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import httpx
@@ -37,17 +37,45 @@ PILOT_P2 = {16, 30, 42, 60, 71, 72, 78, 84, 87, 90}
 P2_EXCLUDE = {14: "cevap 9 tabanında", 43: "çoktan seçmeli şık cevabı", 56: "vektör/matris cevabı"}
 P2_GOLD = {   # canonical forms of answers the verifier cannot read as written
     49: "864", 57: "5.4", 53: "\\{3+2\\sqrt{2}, 3-2\\sqrt{2}\\}", 87: "\\{1+\\sqrt{5}, 1-\\sqrt{5}, -2\\}",
+    39: "11111111100",   # "11,\! 111,\! 111,\! 100" reads as a list of four numbers
 }
-# Manual review decisions after reading outputs/main_v1_review.md (2026-10-08).
-EXCLUDE: dict[str, str] = {}
+# Manual review decisions (2026-10-08): the flagged items in outputs/main_v1_review.md, plus a full
+# reading of every Turkish text against its English original.
+EXCLUDE: dict[str, str] = {
+    "m-p1-1119": "İngilizce asıl belirsiz: \"well over 4 hours longer\" cevabı belirlemiyor",
+}
 CORRECTIONS: dict[str, dict] = {
     "m-p1-0074-tr": {"replace": ("çiçekçi tezbanı işletiyor", "çiçek tezgâhı işletiyor"),
                      "note": "yazım hatası düzeltildi"},
+    "m-p1-0163-tr": {"replace": ("oyunca kahraman", "oyuncak kahraman"), "note": "yazım hatası düzeltildi"},
+    "m-p1-0312-tr": {"replace": ("Elif, Can'dan 3 yaş küçük, Can ise Arda'dan 5 yaş büyüktür.",
+                                 "Elif, Can'dan 5 yaş büyük; Can ise Arda'dan 3 yaş küçüktür."),
+                     "note": "ilişkiler İngilizce aslındaki sırayla kuruldu"},
+    "m-p1-0610-tr": {"replace": ("metrekaresi 194 TL'ye", "metresi 194 TL'ye"),
+                     "note": "\"per meter\" metrekare diye çevrilmişti; yalnız uzunluk verildiği için çözülemezdi"},
+    "m-p1-0437-tr": {"replace": ("portakalarını kendi aralarında değil de 6 arkadaşlarıyla",
+                                 "portakallarını diğer 6 arkadaşlarıyla"),
+                     "note": "\"kendi aralarında değil de\" iki arkadaşı paylaşımın dışında bırakıyordu"},
+    "m-p1-1164-tr": {"replace": ("az buldu. ve Maya", "az buldu ve Maya"), "note": "noktalama düzeltildi"},
     "m-p2-025-tr": {"replace": ("\\[-1 \\le x,\\] \\[y \\le 1\\] koşuluyla", "$-1 \\le x, y \\le 1$ koşuluyla"),
                     "note": "bölünmüş koşul formülü birleştirildi"},
+    "m-p2-006-tr": {"replace": ("çakışana kadar kaç derece", "çakışana kadar en az kaç derece"),
+                    "note": "\"minimum\" çeviride düşmüştü"},
+    "m-p2-007-tr": {"replace": ("değerini nedir?", "değeri nedir?"), "note": "dil bilgisi düzeltildi"},
+    "m-p2-036-tr": {"replace": ("Paul ve Jesse, ilk", "Paul ve Jesse'nin her biri, ilk"),
+                    "note": "\"each\" çeviride düşmüştü; iki ayrı seçim olduğu belirtildi"},
+    "m-p2-061-tr": {"replace": ("$CD$ doğrularının", "$CD$ doğru parçalarının"),
+                    "note": "\"segments\" doğru diye çevrilmişti; doğrular hemen her zaman kesişir, cevap değişirdi"},
     "m-p2-062-tr": {"restore_figure": True, "note": "çeviride kaybolan şekil (asy) geri kondu"},
-    "m-p2-077-tr": {"restore_figure": True, "note": "çeviride kaybolan şekil (asy) geri kondu"},
-    "m-p2-095-tr": {"restore_figure": True, "note": "çeviride kaybolan şekil (asy) geri kondu"},
+    "m-p2-077-tr": {"replace": ("dikdörtgen bir alan, bir atletizm pisti ile çevrilmiştir. Pist, alanın iki kenarından "
+                                "ve iki yarım daireden oluşmaktadır. Pist uzunluğu 400 metredir. Alanın en büyük",
+                                "dikdörtgen bir saha, bir atletizm pisti ile çevrilmiştir. Pist, sahanın iki kenarından "
+                                "ve iki yarım daireden oluşmaktadır. Pist uzunluğu 400 metredir. Sahanın en büyük"),
+                    "restore_figure": True,
+                    "note": "çeviride kaybolan şekil (asy) geri kondu; \"field\" için \"alan\" yerine \"saha\" "
+                            "(\"alanın alanı\" karışıklığı)"},
+    "m-p2-095-tr": {"replace": ("değerini nedir?", "değeri nedir?"), "restore_figure": True,
+                    "note": "çeviride kaybolan şekil (asy) geri kondu; dil bilgisi düzeltildi"},
 }
 CHECKED: dict[str, str] = {   # flagged items that were read and need no change
     "m-p1-0651-tr": "sorun yok: \"belirli bir ayda\" takvim ayı, anlam aynı",
@@ -133,9 +161,18 @@ def build_p1(count: int, pilot_tr_indices: set[int], flags: list[tuple[str, str]
         hits = by_signature.get((number_signature(row["question"]), gold), [])
         if len(hits) == 1 and hits[0] not in pilot_tr_indices and re.fullmatch(r"-?\d+", gold):
             pairs.append((i, hits[0], gold))
-    print(f"P1: {len(en)} İngilizce test sorusundan {len(pairs)} tanesi Türkçeyle birebir eşleşti")
+    # The file holds the train translations first and then the test ones, with a few rows missing, so
+    # the translation of English test row i sits at i + offset for a nearly constant offset. A match
+    # far from that offset is a different problem that happens to share its few numbers and answer.
+    offset = Counter(t - e for e, t, _ in pairs).most_common(1)[0][0]
+    aligned = {p for p in pairs if abs(p[1] - p[0] - offset) <= 5}
+    print(f"P1: {len(en)} İngilizce test sorusundan {len(aligned)} tanesi Türkçe çevirisiyle eşleşti "
+          f"({len(pairs) - len(aligned)} rastlantısal eşleşme atıldı)")
+    # shuffle all matches and keep the first aligned ones that were not excluded on review
+    order = random.Random(SEED).sample(pairs, len(pairs))
+    chosen = [p for p in order if p in aligned and f"m-p1-{p[0]:04d}" not in EXCLUDE][:count]
     rows = []
-    for en_index, tr_index, gold in sorted(random.Random(SEED).sample(pairs, count)):
+    for en_index, tr_index, gold in sorted(chosen):
         pair = f"m-p1-{en_index:04d}"
         tr_text, notes = turkish_number_fixes(tr.loc[tr_index, "question"].strip())
         risky = [w for w in (r"\bayda\b", r"\bkat fazla", r"\bkatı fazla") if re.search(w, tr_text.lower())]
@@ -235,9 +272,12 @@ def main() -> None:
 
     lines = [f"| {item} | {reason} | {decision(item)} |" for item, reason in flags]
     unreviewed = sum(decision(item) == "incelenmedi" for item, _ in flags)
+    flagged = {item for item, _ in flags}
+    found = [f"| {item} | {decision(item)} |" for item in [*EXCLUDE, *CORRECTIONS] if item not in flagged]
     REVIEW_FILE.parent.mkdir(exist_ok=True)
-    REVIEW_FILE.write_text("# Ana set: işaretlenen öğeler ve inceleme kararları\n\n"
-                           "| Öğe | Neden | Karar |\n| --- | --- | --- |\n" + "\n".join(lines) + "\n",
+    REVIEW_FILE.write_text("# Ana set: inceleme kararları\n\n## Otomatik kontrollerin işaretledikleri\n\n"
+                           "| Öğe | Neden | Karar |\n| --- | --- | --- |\n" + "\n".join(lines) + "\n\n"
+                           "## Tam okumada bulunanlar\n\n| Öğe | Karar |\n| --- | --- |\n" + "\n".join(found) + "\n",
                            encoding="utf-8")
     print(f"{len(flags)} işaretli öğe, {unreviewed} tanesi incelenmedi: {REVIEW_FILE}")
 

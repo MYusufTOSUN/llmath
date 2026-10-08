@@ -27,6 +27,19 @@ from llmath.verify import to_fraction, verify
     ("(2, 3)", "2 < x < 3"),                   # interval and inequality, both directions
     ("2 < x < 3", "(2, 3)"),
     ("(3,4]", "3 < x \\le 4"),
+    ("(3,4]", "3 < \\lambda \\le 4"),          # \lambda is LaTeX, not Python
+    ("(3,4]", "\\lambda \\in (3, 4]"),
+    ("221", "\\$221"),                         # dollar amounts in English answers
+    ("221", "$221.00"),
+    ("2100", "\\$2,100"),
+    ("3140", "3.140 kilometre"),
+    ("29", "29 sent"),
+    ("864", "864 \\text{ in}^2"),
+    ("\\frac{20000}{\\pi}", "\\frac{20000}{\\pi} \\text{ m}^2"),
+    ("11\\sqrt2", "11√2"),
+    ("12", "12^{\\text{th}}"),
+    ("3\\pi", "3 pi"),
+    ("2x", "2 x"),
 ])
 def test_equivalent_answers_are_correct(gold, pred):
     verdict = verify(gold, pred)
@@ -39,6 +52,7 @@ def test_equivalent_answers_are_correct(gold, pred):
     ("48", "50"),
     ("\\frac{\\sqrt{3}}{2}", "\\frac{\\sqrt{2}}{2}"),
     ("2x+3", "2x-3"),
+    ("221", "\\$212"),
 ])
 def test_wrong_answers_are_incorrect(gold, pred):
     assert verify(gold, pred).status == "incorrect"
@@ -52,6 +66,7 @@ def test_missing_answer_is_unparsed():
 def test_code_like_answer_is_refused():
     verdict = verify("5", "__import__('os').system('dir')")
     assert verdict.status == "unparsed"
+    assert verify("5", "lambda: 5").status == "unparsed"
 
 
 def test_ambiguity_is_reported():

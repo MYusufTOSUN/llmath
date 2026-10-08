@@ -31,9 +31,22 @@ def test_number_readings(token, readings, ambiguous):
     ("\\boxed{\\dfrac{3}{4}}", "\\frac{3}{4}"),
     ("**18**", "18"),
     ("2,4x + 1", "2.4x + 1"),
+    ("\\$221", "221"),
+    ("221 dollars", "221"),
+    ("15 kasa", "15"),
+    ("864 in^2", "864"),
+    ("4 \\text{ in/s}", "4"),
+    ("\\frac{20000}{\\pi} \\text{ m}^2", "\\frac{20000}{\\pi}"),
+    ("12^{\\text{th}}", "12"),
+    ("11√2", "11\\sqrt{2}"),
 ])
 def test_normalize_first_candidate(raw, first):
     assert normalize_answer(raw).candidates[0] == first
+
+
+def test_words_that_may_be_math_are_kept():
+    assert normalize_answer("2 x").candidates == ["2 x"]
+    assert normalize_answer("3 pi").candidates == ["3 pi"]
 
 
 def test_percent_gives_both_readings():

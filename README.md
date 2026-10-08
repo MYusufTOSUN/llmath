@@ -51,12 +51,14 @@ Makine çevirileri elle gözden geçirildi; düzeltmeler gerekçeleriyle birlikt
 | P2 | 80 MATH-500 problemi, Türkçe + İngilizce paralel (160 öğe); konu ve zorluk düzeyi MATH-500'den | MCLM MT-MATH100, MIT |
 | P3 | 100 taze Türkçe şablon sorusu (20 şablon × 5) | Bu proje, CC BY 4.0 |
 
-Pilotta kullanılan sorular ana sete alınmadı. GSM8K-TR yerelleştirilmiş bir çeviridir: bazı sorularda sayılar değişmiş, bazılarında cevap anahtarı hatalı. Bu yüzden P1'e yalnızca sayıları ve cevabı İngilizce aslıyla birebir eşleşen sorular alındı (1319 test sorusundan 641'i), cevap anahtarı da İngilizce asıldan gelir. P1'in Türkçe metinlerinde ondalık ayırıcı virgül, binlik ayırıcı noktadır (2,74; 1.250). P2 metinleri LaTeX olduğu için formüllerdeki sayılar kaynaktaki gibi bırakıldı. Otomatik kontrollerin işaretlediği 24 öğe elle incelendi. Kararlar `scripts/build_main_set.py` içinde kayıtlıdır (`CORRECTIONS`, `CHECKED`, `EXCLUDE`): üç soruda çeviride kaybolan şekil geri kondu, iki soruda metin düzeltildi.
+Pilotta kullanılan sorular ana sete alınmadı. GSM8K-TR yerelleştirilmiş bir çeviridir: bazı sorularda sayılar değişmiş, bazılarında cevap anahtarı hatalı. Bu yüzden P1'e yalnızca Türkçe çevirisi dosyada beklenen sırada duran ve sayıları ile cevabı İngilizce aslıyla birebir eşleşen sorular alındı (1319 test sorusundan 622'si); cevap anahtarı İngilizce asıldan gelir. Sıra koşulu gereklidir, çünkü az sayılı sorularda başka bir problem rastlantıyla aynı sayıları ve aynı cevabı taşıyabiliyor (19 böyle eşleşme vardı). P1'in Türkçe metinlerinde ondalık ayırıcı virgül, binlik ayırıcı noktadır (2,74; 1.250). P2 metinleri LaTeX olduğu için formüllerdeki sayılar kaynaktaki gibi bırakıldı.
+
+Otomatik kontrollerin işaretlediği 24 öğe incelendi, ardından 200 Türkçe metnin tamamı İngilizce aslıyla yan yana okundu. 14 Türkçe metin düzeltildi. Bunlardan anlamı değiştirenler şunlardı: "segments" kelimesinin "doğrular" diye çevrilmesi, "per meter" ifadesinin "metrekare" diye çevrilmesi, çeviride düşen "en az" ve "her biri", ayrıca üç soruda kaybolan şekil. İngilizce aslı belirsiz olan bir soru çıkarıldı. Kararlar `scripts/build_main_set.py` içinde (`CORRECTIONS`, `CHECKED`, `EXCLUDE`), özetleri `outputs/main_v1_review.md` dosyasındadır.
 
 ## Doğrulama katmanları (`llmath/verify.py`)
 
 1. **Çıkarım:** son `\boxed{}`, "Cevap:" satırı ya da son sayı (PoT'de programın son çıktı satırı).
-2. **Türkçe normalleştirme** (`llmath/normalize.py`): ondalık virgül (`3,5`), binlik nokta (`1.250`), `%25`, birimler ve ekler (`25 TL'dir`), `x = 4`, `x = 2 veya x = -3`. Belirsiz yazımlar (`1.250` → 1250 mi, 1,25 mi?) her iki okumayla denenir ve işaretlenir.
+2. **Türkçe normalleştirme** (`llmath/normalize.py`): ondalık virgül (`3,5`), binlik nokta (`1.250`), `%25`, para birimleri (`\$221`, `₺300`), birimler ve ekler (`25 TL'dir`, `15 kasa`, `864 \text{ in}^2`), `x = 4`, `x = 2 veya x = -3`. Belirsiz yazımlar (`1.250` → 1250 mi, 1,25 mi?) her iki okumayla denenir ve işaretlenir. Sayıdan sonra gelen kelime değişken ya da fonksiyon olabiliyorsa (`2 x`, `3 pi`) silinmez.
 3. **Metin eşitliği → sayısal eşitlik → Math-Verify → SymPy** (sabitlerde sayısal, değişkenli ifadelerde rastgele nokta testi).
 
 Her kararın hangi katmanda verildiği veritabanına yazılır; böylece katmanların güvenilirliği insan etiketine göre ölçülebilir.

@@ -12,15 +12,14 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-_UNIT_WORDS = (
-    "tl|lira|kuruş|kurus|₺|cm|mm|km|m|kg|g|gr|gram|litre|lt|l|ml|saat|sa|dakika|dk|saniye|sn|"
-    "gün|gun|hafta|ay|yıl|yil|yaş|yas|yaşında|kişi|kisi|adet|tane|metre|derece|puan|soru|"
-    "km/saat|km/sa|m/s|cm²|m²|cm³|m³|cm2|m2|cm3|m3|°"
-)
 _NUMBER = r"[+-]?\d[\d.,]*"
-_NUMBER_WITH_UNIT = re.compile(
-    rf"^(?P<num>{_NUMBER})\s*(?:(?:{_UNIT_WORDS})(?=\W|$)[\w/²³°'’\s]*|°)$", re.IGNORECASE
-)
+# A number followed by a unit or a counted noun: "25 TL'dir", "12 km/saat", "15 kasa", "864 in^2".
+_WORD = r"[^\W\d_]+(?:[/'’.][^\W\d_]*)*(?:\^\{?[23]\}?|[²³])?"
+_NUMBER_WITH_UNIT = re.compile(rf"^(?P<num>{_NUMBER})\s*(?P<unit>°|{_WORD}(?:\s+{_WORD}){{0,3}})$")
+_UNIT_LETTERS = {"m", "g", "l", "L", "s", "h"}       # one-letter words that are units, not variables
+_MATH_WORDS = {"pi", "sqrt", "log", "ln", "sin", "cos", "tan", "cot", "sec", "csc", "exp", "mod"}
+_CURRENCY = re.compile(r"^(?:\\?\$|₺|€|£)\s*|\s*(?:\\?\$|₺|€|£)$")
+_TEXT_UNIT = re.compile(r"\s*\\(?:text|mathrm|mbox)\{[^{}]*\}(?:\^\{?[23]\}?|[²³])?$")
 _TURKISH_SUFFIX = re.compile(r"^(?P<num>" + _NUMBER + r")['’][a-zçğıöşü]+$", re.IGNORECASE)
 _PERCENT = re.compile(r"^(?:%\s*(?P<a>" + _NUMBER + r")|(?P<b>" + _NUMBER + r")\s*%)$")
 _ASSIGNMENT = re.compile(r"^[a-zA-Z](?:_\{?\w+\}?)?\s*=\s*(?P<rhs>[^=]+)$")
@@ -94,9 +93,11 @@ def _brace_frac_arguments(s: str) -> str:
 def clean_latex(s: str) -> str:
     s = re.sub(r"\\[dt]frac", r"\\frac", s)
     s = _brace_frac_arguments(s)
+    s = re.sub(r"√\s*(\d+|[a-zA-Z])", r"\\sqrt{\1}", s)      # 11√2 -> 11\sqrt{2}
     s = re.sub(r"\\sqrt\s*([0-9a-zA-Z])", r"\\sqrt{\1}", s)   # \sqrt2 -> \sqrt{2}
     s = re.sub(r"\\(?:left|right|displaystyle|!|,|;|:|\s)", "", s)
     s = re.sub(r"\^\{?\\circ\}?", "", s)
+    s = re.sub(r"\^\{?\\(?:text|mathrm)\{(?:st|nd|rd|th)\}\}?", "", s)   # 12^{\text{th}} -> 12
     s = re.sub(r"\\(?:text|mathrm|textbf|mbox)\{([^{}]*)\}", r"\1", s)
     s = s.replace(r"\%", "%").replace("−", "-").replace("·", "*").replace("×", "*")
     return re.sub(r"\s+", " ", s).strip()
@@ -137,10 +138,28 @@ def normalize_gold(text: str) -> str:
     return assignment["rhs"].strip() if assignment else s
 
 
+def _is_unit(words: str) -> bool:
+    """Words after a number are a unit unless they could be math: a variable or a function."""
+    for word in re.split(r"[\s/]+", words):
+        bare = re.sub(r"['’.].*|\^.*|[²³°]", "", word)
+        if bare and ((len(bare) == 1 and bare not in _UNIT_LETTERS) or bare.lower() in _MATH_WORDS):
+            return False
+    return True
+
+
 def normalize_answer(text: str, answer_type: str | None = None) -> Normalized:
     """Turn a model's final answer into one or more canonical candidates."""
     notes: list[str] = []
-    s = clean_latex(strip_wrappers(text))
+    s = strip_wrappers(text)
+    unit = _TEXT_UNIT.search(s)
+    if unit and re.search(r"\d", s[:unit.start()]):     # "\frac{20000}{\pi} \text{ m}^2"
+        s = s[:unit.start()]
+        notes.append("birim kaldırıldı")
+    s = clean_latex(s)
+    without_currency = _CURRENCY.sub("", s)
+    if without_currency != s:
+        s = without_currency
+        notes.append("birim kaldırıldı")
 
     if answer_type == "choice":
         choice = _CHOICE.match(s)
@@ -164,14 +183,10 @@ def normalize_answer(text: str, answer_type: str | None = None) -> Normalized:
 
     for pattern, note in ((_NUMBER_WITH_UNIT, "birim kaldırıldı"), (_TURKISH_SUFFIX, "ek kaldırıldı")):
         match = pattern.match(s)
-        if match:
+        if match and (pattern is not _NUMBER_WITH_UNIT or _is_unit(match["unit"])):
             s = match["num"]
             notes.append(note)
             break
-
-    if s.startswith("₺"):
-        s = s[1:].strip()
-        notes.append("birim kaldırıldı")
 
     if re.fullmatch(_NUMBER, s):
         readings, ambiguous = number_readings(s)
