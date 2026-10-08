@@ -3,7 +3,7 @@
 Use it after a change to the sandbox or the verifier, so that all answers of a run are judged by
 the same rules. Models are not called again: stored outputs and programs are reused. Programs that
 the sandbox blocked or that timed out are executed again (a timeout depends on how busy the
-machine was). Changed verdicts are written to outputs/reverify-<run>.csv for the record.
+machine was). Changed verdicts are written to outputs/reverify-<run>-<time>.csv for the record.
 
 Çalıştırma: python scripts/reverify.py --name main-1 [--dry-run]
 """
@@ -14,6 +14,7 @@ import argparse
 import csv
 import sys
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -73,7 +74,8 @@ def main() -> None:
         else:
             session.commit()
 
-    out = ROOT / "outputs" / f"reverify-{args.name}{'-onizleme' if args.dry_run else ''}.csv"
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")   # every pass keeps its own record
+    out = ROOT / "outputs" / f"reverify-{args.name}-{stamp}{'-onizleme' if args.dry_run else ''}.csv"
     out.parent.mkdir(exist_ok=True)
     with out.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(changes[0]) if changes else ["response_id"])

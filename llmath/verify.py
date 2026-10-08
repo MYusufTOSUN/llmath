@@ -185,6 +185,7 @@ _GLOBALS.update({name: getattr(sympy, name) for name in (
     "factorial", "binomial", "floor", "ceiling", "Interval", "FiniteSet", "Union",
 )})
 _LOCALS = {"e": sympy.E, "pi": sympy.pi}
+_IMAGINARY = sympy.Symbol("i")   # MATH writes the imaginary unit as i, SymPy prints it as I
 
 
 def to_sympy(text: str):
@@ -229,7 +230,7 @@ def _same(a, b, text: str = "") -> bool:
             items_a, items_b = sorted(items_a, key=_sort_key), sorted(items_b, key=_sort_key)
         return all(_same(x, y) for x, y in zip(items_a, items_b))
     try:
-        a, b = sympy.sympify(a), sympy.sympify(b)
+        a, b = sympy.sympify(a).subs(_IMAGINARY, sympy.I), sympy.sympify(b).subs(_IMAGINARY, sympy.I)
         if a == b:
             return True
         symbols = a.free_symbols | b.free_symbols

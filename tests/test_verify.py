@@ -47,6 +47,8 @@ from llmath.verify import to_fraction, verify
     ("(3,4]", "Interval.Lopen(3, 4)"),
     ("(2, \\infty)", "Interval.open(2, oo)"),
     ("2", "(" + " + ".join(["1/100"] * 200) + ")"),                      # long but plain arithmetic
+    ("(2, 9)", "(2 < x) & (x < 9)"),
+    ("6 - 5i", "2 - 3*(-1)**(3/4)*sqrt(2) - 3*I + (-1)**(1/4)*sqrt(2)"),   # i in the gold, I from SymPy
 ])
 def test_equivalent_answers_are_correct(gold, pred):
     verdict = verify(gold, pred)
@@ -60,6 +62,8 @@ def test_equivalent_answers_are_correct(gold, pred):
     ("\\frac{\\sqrt{3}}{2}", "\\frac{\\sqrt{2}}{2}"),
     ("2x+3", "2x-3"),
     ("221", "\\$212"),
+    ("6 - 5i", "6 + 5*I"),
+    ("(-\\sqrt{3}, \\sqrt{3})", "Interval(-sqrt(3), sqrt(3))"),          # closed is not open
 ])
 def test_wrong_answers_are_incorrect(gold, pred):
     assert verify(gold, pred).status == "incorrect"
