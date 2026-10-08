@@ -37,6 +37,12 @@ def test_sandbox_blocks_dangerous_code():
     assert run_code("import subprocess").blocked
 
 
+def test_sandbox_allows_computation_modules_and_interval_open():
+    assert check_code("from collections import Counter\nimport datetime\nimport re") == []
+    assert check_code("from sympy import Interval\nprint(Interval.open(0, 1))") == []
+    assert check_code("data = open('x.txt').read()")    # the builtin open() is still refused
+
+
 def test_sandbox_hides_api_keys(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "gizli")
     env = child_env("C:/tmp")

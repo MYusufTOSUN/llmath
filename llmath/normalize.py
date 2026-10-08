@@ -20,6 +20,9 @@ _UNIT_LETTERS = {"m", "g", "l", "L", "s", "h"}       # one-letter words that are
 _MATH_WORDS = {"pi", "sqrt", "log", "ln", "sin", "cos", "tan", "cot", "sec", "csc", "exp", "mod"}
 _CURRENCY = re.compile(r"^(?:\\?\$|₺|€|£)\s*|\s*(?:\\?\$|₺|€|£)$")
 _TEXT_UNIT = re.compile(r"\s*\\(?:text|mathrm|mbox)\{[^{}]*\}(?:\^\{?[23]\}?|[²³])?$")
+# How a PoT program prints a SymPy interval: Interval.open(-sqrt(3), sqrt(3)) means (-√3, √3).
+_SYMPY_INTERVAL = re.compile(r"^Interval(?:\.(?P<kind>open|Lopen|Ropen))?\((?P<low>.+),\s*(?P<high>.+)\)$")
+_INTERVAL_BRACKETS = {None: "[]", "open": "()", "Lopen": "(]", "Ropen": "[)"}
 _TURKISH_SUFFIX = re.compile(r"^(?P<num>" + _NUMBER + r")['’][a-zçğıöşü]+$", re.IGNORECASE)
 _PERCENT = re.compile(r"^(?:%\s*(?P<a>" + _NUMBER + r")|(?P<b>" + _NUMBER + r")\s*%)$")
 _ASSIGNMENT = re.compile(r"^(?:[a-zA-Z](?:_\{?\w+\}?)?|Ç\.?\s*K\.?)\s*=\s*(?P<rhs>[^=]+)$")   # Ç.K. = {...}
@@ -138,6 +141,20 @@ def normalize_gold(text: str) -> str:
     return assignment["rhs"].strip() if assignment else s
 
 
+def _sympy_interval(s: str) -> str | None:
+    """Interval notation in LaTeX for SymPy's printed interval, so it compares with the gold."""
+    match = _SYMPY_INTERVAL.match(s)
+    if match is None:
+        return None
+
+    def latex(arg: str) -> str:
+        arg = re.sub(r"sqrt\(([^()]*)\)", r"\\sqrt{\1}", arg.strip())
+        return re.sub(r"\bpi\b", r"\\pi", re.sub(r"\boo\b", r"\\infty", arg))
+
+    left, right = _INTERVAL_BRACKETS[match["kind"]]
+    return f"{left}{latex(match['low'])}, {latex(match['high'])}{right}"
+
+
 def _is_unit(words: str) -> bool:
     """Words after a number are a unit unless they could be math: a variable or a function."""
     for word in re.split(r"[\s/]+", words):
@@ -165,6 +182,10 @@ def normalize_answer(text: str, answer_type: str | None = None) -> Normalized:
         choice = _CHOICE.match(s)
         if choice:
             return Normalized([choice["letter"].upper()], notes=["şık"])
+
+    interval = _sympy_interval(s)
+    if interval:
+        return Normalized([interval], notes=notes + ["SymPy aralığı"])
 
     assignment = _ASSIGNMENT.match(s)
     if assignment and not _OR_WORDS.search(s):

@@ -77,9 +77,16 @@ _LATEX_FRACTION = re.compile(r"^(-?)\\frac\{(-?[\d.]+)\}\{(-?[\d.]+)\}$")
 _RELATIVE_TOLERANCE = Fraction(1, 10**9)
 
 
+# A PoT program may print an exact but unsimplified value hundreds of characters long; plain
+# arithmetic like that is not code-like, so it gets a longer limit than other answers.
+_ARITHMETIC = re.compile(r"(?:[\d\s+\-*/().,^]|sqrt|I|pi|E|oo)+")
+
+
 def is_safe(text: str) -> bool:
     """Answers go to parsers that may evaluate Python; refuse anything code-like."""
-    return len(text) <= 300 and not _UNSAFE.search(text)
+    if _UNSAFE.search(text):
+        return False
+    return len(text) <= 300 or (len(text) <= 5000 and _ARITHMETIC.fullmatch(text) is not None)
 
 
 def _squash(text: str) -> str:

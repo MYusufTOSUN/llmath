@@ -30,6 +30,7 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | Kademeli çözüm analizi (AS2) | `python -m llmath.cascade --run pilot-1 --cheap qwen3-8b --strong gemini-flash-lite` |
 | Testler | `python -m pytest` |
 | Hata etiketleme kod kitabı | `python -m llmath.taxonomy` |
+| Bir çalıştırmayı güncel sandbox ve doğrulayıcıyla yeniden değerlendir | `python scripts/reverify.py --name main-1` (model yeniden çağrılmaz; değişenler `outputs/reverify-main-1.csv`) |
 | Pilot veri setini yeniden üret | `python scripts/build_pilot_set.py` |
 | Ana veri setini yeniden üret | `python scripts/build_main_set.py` (inceleme listesi: `outputs/main_v1_review.md`) |
 
@@ -89,7 +90,7 @@ tests/      birim testleri
 
 ## Güvenlik notu
 
-PoT stratejisinde modelin yazdığı kod ayrı bir Python sürecinde çalışır: yalnız `math`, `fractions` ve `sympy` gibi modüllere izin verilir, süre sınırı vardır ve süreç API anahtarlarını göremez. Bu pilot düzeyinde bir korumadır; tam yalıtım (ağsız Docker konteyneri) sonraki aşamada eklenecek.
+PoT stratejisinde modelin yazdığı kod ayrı bir Python sürecinde çalışır. Yalnız dosya, ağ ya da süreç erişimi olmayan hesaplama modüllerine izin verilir: `math`, `fractions`, `decimal`, `sympy`, `itertools`, `collections`, `datetime` vb. Ayrıca süre sınırı vardır ve süreç API anahtarlarını göremez. Bu pilot düzeyinde bir korumadır; tam yalıtım (ağsız Docker konteyneri) sonraki aşamada eklenecek.
 
 ## Lisans
 

@@ -16,11 +16,14 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-ALLOWED_MODULES = {"math", "cmath", "fractions", "decimal", "itertools", "functools",
-                   "statistics", "sympy"}
+# Computation-only modules: none of them reads files, opens sockets or starts processes.
+ALLOWED_MODULES = {"math", "cmath", "fractions", "decimal", "itertools", "functools", "statistics",
+                   "sympy", "collections", "datetime", "operator", "heapq", "bisect", "string", "re"}
 BANNED_NAMES = {"open", "exec", "eval", "compile", "__import__", "input", "globals", "locals",
                 "vars", "getattr", "setattr", "delattr", "breakpoint", "exit", "quit", "help",
                 "memoryview", "lambdify"}
+# Only the builtin open() reaches files; as an attribute it is SymPy's Interval.open.
+BANNED_ATTRIBUTES = BANNED_NAMES - {"open"}
 # These evaluate strings as code when given one (e.g. sympify("__import__('os')...")).
 STRING_EVALUATORS = {"sympify", "S", "parse_expr", "parse_latex"}
 
@@ -58,7 +61,7 @@ def check_code(code: str) -> list[str]:
                 problems.append(f"izin verilmeyen modül: {module}")
         if isinstance(node, ast.Name) and (node.id in BANNED_NAMES or node.id.startswith("__")):
             problems.append(f"izin verilmeyen ad: {node.id}")
-        if isinstance(node, ast.Attribute) and (node.attr.startswith("__") or node.attr in BANNED_NAMES):
+        if isinstance(node, ast.Attribute) and (node.attr.startswith("__") or node.attr in BANNED_ATTRIBUTES):
             problems.append(f"izin verilmeyen öznitelik: {node.attr}")
         if isinstance(node, ast.Call):
             func = node.func

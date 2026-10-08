@@ -42,6 +42,11 @@ from llmath.verify import to_fraction, verify
     ("12", "12^{\\text{th}}"),
     ("3\\pi", "3 pi"),
     ("2x", "2 x"),
+    ("(-\\sqrt{3}, \\sqrt{3})", "Interval.open(-sqrt(3), sqrt(3))"),   # SymPy printouts from PoT
+    ("[1, 2]", "Interval(1, 2)"),
+    ("(3,4]", "Interval.Lopen(3, 4)"),
+    ("(2, \\infty)", "Interval.open(2, oo)"),
+    ("2", "(" + " + ".join(["1/100"] * 200) + ")"),                      # long but plain arithmetic
 ])
 def test_equivalent_answers_are_correct(gold, pred):
     verdict = verify(gold, pred)
@@ -69,6 +74,7 @@ def test_code_like_answer_is_refused():
     verdict = verify("5", "__import__('os').system('dir')")
     assert verdict.status == "unparsed"
     assert verify("5", "lambda: 5").status == "unparsed"
+    assert verify("5", "abc " * 100).status == "unparsed"          # long and not plain arithmetic
 
 
 def test_ambiguity_is_reported():
