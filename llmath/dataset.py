@@ -26,8 +26,8 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
             handle.write(json.dumps({key: row.get(key) for key in FIELDS}, ensure_ascii=False) + "\n")
 
 
-def import_questions(path: Path = PILOT_FILE) -> int:
-    """Insert or update every question in the file; returns how many were read."""
+def import_questions(path: Path = PILOT_FILE) -> list[str]:
+    """Insert or update every question in the file; returns their ids in file order."""
     init_db()
     rows = read_jsonl(path)
     with SessionLocal() as session:
@@ -41,4 +41,4 @@ def import_questions(path: Path = PILOT_FILE) -> int:
                 for key, value in values.items():
                     setattr(question, key, value)
         session.commit()
-    return len(rows)
+    return [row["id"] for row in rows]

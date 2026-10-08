@@ -23,7 +23,8 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | İş | Komut |
 | --- | --- |
 | Toplu deney (pilot) | `python -m llmath.runner --name pilot-1 --models qwen3-8b --strategies cot pot` |
-| Yarıda kalan deneye devam | aynı komutu aynı `--name` ile tekrar çalıştırın |
+| Ana deney (500 soru) | `python -m llmath.runner --name main-1 --data data/main_v1.jsonl --models qwen3-8b` (modeller ayrı süreçlerde aynı anda çalışabilir) |
+| Yarıda kalan deneye devam | aynı komutu aynı `--name` ile tekrar çalıştırın; bir model art arda 5 API hatası alırsa (ör. günlük kota) durur |
 | API + arayüz | `.\baslat.ps1` → arayüz http://localhost:8501, API belgeleri http://127.0.0.1:8000/docs |
 | Bir çalıştırmanın Markdown raporu | `python scripts/pilot_report.py --name pilot-1 > outputs/pilot-1.md` |
 | Kademeli çözüm analizi (AS2) | `python -m llmath.cascade --run pilot-1 --cheap qwen3-8b --strong gemini-flash-lite` |

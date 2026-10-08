@@ -16,6 +16,7 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 API_URL = os.getenv("LLMATH_API_URL", "http://127.0.0.1:8000")
 DATA_DIR = ROOT / "data"
 PILOT_FILE = DATA_DIR / "pilot.jsonl"
+MAIN_FILE = DATA_DIR / "main_v1.jsonl"
 
 
 @dataclass(frozen=True)

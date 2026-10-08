@@ -106,7 +106,8 @@ class Annotation(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
-_connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+# Several runner processes may write at once (one per model); wait for the lock instead of failing.
+_connect_args = {"check_same_thread": False, "timeout": 30} if DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 

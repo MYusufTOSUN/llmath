@@ -2,6 +2,7 @@
 
 Örnek:
     python -m llmath.runner --name pilot-1 --models qwen3-8b --strategies cot pot
+    python -m llmath.runner --name main-1 --data data/main_v1.jsonl --models gemini-flash-lite
 A run can be resumed with the same --name; finished combinations are skipped.
 """
 
@@ -10,10 +11,11 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from pathlib import Path
 
 from sqlalchemy import select
 
-from .config import MODELS
+from .config import MODELS, PILOT_FILE
 from .dataset import import_questions
 from .db import Question, Response, SessionLocal
 from .service import get_or_create_run, model_status, record, solve_and_verify, summarize
@@ -24,6 +26,8 @@ _MARK = {"correct": "✓", "incorrect": "✗", "unparsed": "?"}
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="LLMath toplu deney çalıştırıcı")
     parser.add_argument("--name", default="pilot", help="çalıştırma adı (aynı adla devam edilir)")
+    parser.add_argument("--data", type=Path, default=PILOT_FILE,
+                        help="soru dosyası (JSONL); yalnız bu dosyadaki sorular çözülür")
     parser.add_argument("--models", nargs="+", default=["qwen3-8b"], choices=sorted(MODELS))
     parser.add_argument("--strategies", nargs="+", default=["cot", "pot"], choices=["cot", "pot"])
     parser.add_argument("--subsets", nargs="+", default=["P1", "P2", "P3"])
@@ -31,15 +35,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, help="her model ve strateji için en fazla soru sayısı")
     parser.add_argument("--pause", type=float, default=4.0,
                         help="bulut modellerinde çağrılar arası bekleme (sn); ücretsiz katman dakika sınırı için")
+    parser.add_argument("--max-errors", type=int, default=5,
+                        help="art arda bu kadar API hatasında model durdurulur (ör. günlük kota doldu)")
     args = parser.parse_args(argv)
 
-    import_questions()
+    ids = import_questions(args.data)
     with SessionLocal() as session:
-        run = get_or_create_run(session, args.name, {"models": args.models, "strategies": args.strategies,
+        run = get_or_create_run(session, args.name, {"data": args.data.name, "models": args.models,
+                                                     "strategies": args.strategies,
                                                      "subsets": args.subsets, "langs": args.langs})
         session.commit()
         questions = list(session.scalars(
-            select(Question).where(Question.subset.in_(args.subsets), Question.lang.in_(args.langs))
+            select(Question).where(Question.id.in_(ids), Question.subset.in_(args.subsets),
+                                   Question.lang.in_(args.langs))
             .order_by(Question.subset, Question.id)))
         if args.limit:
             questions = questions[: args.limit]
@@ -61,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
             if not ok:
                 print(f"! {model_key} atlandı: {reason}", file=sys.stderr)
                 continue
+            errors = 0   # consecutive API failures; a full daily quota fails every call that follows
             for strategy in args.strategies:
                 todo = [q for q in questions if (q.id, model_key, strategy) not in done]
                 for i, question in enumerate(todo, start=1):
@@ -71,10 +80,17 @@ def main(argv: list[str] | None = None) -> int:
                                                        question.lang, question.answer_type)
                     record(session, run, question.text, question.id, spec, result, verdict)
                     session.commit()
+                    errors = errors + 1 if result.error else 0
                     status = verdict.status if verdict else "unparsed"
                     print(f"[{i}/{len(todo)}] {model_key} {strategy} {question.id} {_MARK[status]} "
                           f"({verdict.layer if verdict else '-'}) cevap={result.answer!r} "
                           f"{time.perf_counter() - started:.1f} sn", flush=True)
+                    if errors >= args.max_errors:
+                        break
+                if errors >= args.max_errors:
+                    print(f"! {model_key} durduruldu: art arda {errors} API hatası (kota dolmuş olabilir); "
+                          f"aynı komutla sonra devam edin", file=sys.stderr)
+                    break
 
         print(f"\nÇalıştırma #{run.id} ({run.name}) özeti:")
         for row in summarize(session, run.id):

@@ -22,9 +22,9 @@ _CURRENCY = re.compile(r"^(?:\\?\$|₺|€|£)\s*|\s*(?:\\?\$|₺|€|£)$")
 _TEXT_UNIT = re.compile(r"\s*\\(?:text|mathrm|mbox)\{[^{}]*\}(?:\^\{?[23]\}?|[²³])?$")
 _TURKISH_SUFFIX = re.compile(r"^(?P<num>" + _NUMBER + r")['’][a-zçğıöşü]+$", re.IGNORECASE)
 _PERCENT = re.compile(r"^(?:%\s*(?P<a>" + _NUMBER + r")|(?P<b>" + _NUMBER + r")\s*%)$")
-_ASSIGNMENT = re.compile(r"^[a-zA-Z](?:_\{?\w+\}?)?\s*=\s*(?P<rhs>[^=]+)$")
+_ASSIGNMENT = re.compile(r"^(?:[a-zA-Z](?:_\{?\w+\}?)?|Ç\.?\s*K\.?)\s*=\s*(?P<rhs>[^=]+)$")   # Ç.K. = {...}
 _CHOICE = re.compile(r"^\(?(?P<letter>[A-Ea-e])\)?[.)]?$")
-_OR_WORDS = re.compile(r"\s+(?:veya|ya da|yahut|or)\s+", re.IGNORECASE)
+_OR_WORDS = re.compile(r"\s+(?:veya|ya da|yahut|ve|or|and)\s+", re.IGNORECASE)   # "4 ve 20" lists solutions
 
 
 @dataclass

@@ -25,12 +25,11 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from llmath.config import DATA_DIR, PILOT_FILE  # noqa: E402
+from llmath.config import MAIN_FILE, PILOT_FILE  # noqa: E402
 from llmath.dataset import read_jsonl, write_jsonl  # noqa: E402
 from llmath.templates import MAIN_TEMPLATES, generate  # noqa: E402
 from llmath.verify import verify  # noqa: E402
 
-MAIN_FILE = DATA_DIR / "main_v1.jsonl"
 REVIEW_FILE = ROOT / "outputs" / "main_v1_review.md"
 SEED = 2027
 PILOT_P2 = {16, 30, 42, 60, 71, 72, 78, 84, 87, 90}

@@ -20,6 +20,8 @@ from llmath.verify import to_fraction, verify
     ("2x+3", "3 + 2x"),
     ("x^2-1", "(x-1)(x+1)"),
     ("\\{2,-3\\}", "x = -3 veya x = 2"),
+    ("\\{4, 20\\}", "4 ve 20"),
+    ("\\{4, 20\\}", "Ç.K. = \\{4, 20\\}"),            # Turkish "çözüm kümesi" notation
     ("(3, \\frac{\\pi}{2})", "(3,\\frac{\\pi}{2})"),
     ("11\\sqrt2", "11\\sqrt{2}"),                # LaTeX shorthand without braces
     ("\\frac9{19}", "9/19"),
