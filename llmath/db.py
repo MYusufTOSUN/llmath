@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text, create_engine, inspect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
-from .config import DATABASE_URL
+from .config import DATABASE_URL, ROOT
 
 
 def _now() -> datetime:
@@ -32,6 +32,7 @@ class Question(Base):
     source: Mapped[str] = mapped_column(String(128))
     license: Mapped[str] = mapped_column(String(64))
     note: Mapped[str | None] = mapped_column(Text)   # manual review notes (corrections, caveats)
+    difficulty: Mapped[int | None] = mapped_column(Integer)   # MATH level 1-5 where known
 
 
 class Run(Base):
@@ -66,6 +67,7 @@ class Response(Base):
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     cost_usd: Mapped[float | None] = mapped_column(Float)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
+    finish_reason: Mapped[str | None] = mapped_column(String(32))   # "length" = cut at max tokens
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
@@ -109,5 +111,21 @@ engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
-def init_db() -> None:
-    Base.metadata.create_all(engine)
+def init_db(url: str = DATABASE_URL) -> None:
+    """Build a new database from the models, or migrate an existing one to the latest schema."""
+    from alembic import command
+    from alembic.config import Config
+
+    target = engine if url == DATABASE_URL else create_engine(url)
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    tables = set(inspect(target).get_table_names())
+    with target.begin() as connection:
+        config.attributes["connection"] = connection
+        if "questions" not in tables:
+            Base.metadata.create_all(connection)
+            command.stamp(config, "head")
+        else:
+            if "alembic_version" not in tables:
+                command.stamp(config, "0001")   # pilot databases predate migrations
+            command.upgrade(config, "head")

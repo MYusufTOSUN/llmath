@@ -2,6 +2,7 @@
 sympy
 math-verify[antlr4_13_2]
 sqlalchemy>=2.0
+alembic
 python-dotenv
 httpx
 

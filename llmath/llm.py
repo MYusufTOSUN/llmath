@@ -19,6 +19,7 @@ class LLMResponse:
     output_tokens: int | None
     latency_ms: int
     cost_usd: float | None
+    finish_reason: str | None = None   # "length" when the output hit the token limit
 
 
 class LLMError(RuntimeError):
@@ -57,6 +58,7 @@ def _ollama_chat(spec: ModelSpec, messages: list[dict[str, str]], temperature: f
         output_tokens=data.get("eval_count"),
         latency_ms=int((time.perf_counter() - start) * 1000),
         cost_usd=0.0,
+        finish_reason=data.get("done_reason"),
     )
 
 
@@ -87,6 +89,7 @@ def _litellm_chat(spec: ModelSpec, messages: list[dict[str, str]], temperature: 
         output_tokens=getattr(usage, "completion_tokens", None),
         latency_ms=int((time.perf_counter() - start) * 1000),
         cost_usd=cost,
+        finish_reason=getattr(response.choices[0], "finish_reason", None),
     )
 
 

@@ -11,7 +11,7 @@ from .config import PILOT_FILE
 from .db import Question, SessionLocal, init_db
 
 FIELDS = ("id", "subset", "lang", "pair_id", "text", "gold", "answer_type", "topic", "source", "license",
-          "note")
+          "note", "difficulty")
 
 
 def read_jsonl(path: Path) -> list[dict]:

@@ -64,8 +64,37 @@ def _unwrap_command(s: str, command: str) -> str | None:
     return None
 
 
+def _brace_frac_arguments(s: str) -> str:
+    """\\frac34, \\frac 34 and \\frac9{19} -> \\frac{3}{4}, \\frac{9}{19} (LaTeX takes one token)."""
+    out, i = [], 0
+    while (j := s.find(r"\frac", i)) != -1:
+        out.append(s[i:j + 5])
+        k = j + 5
+        args = []
+        for _ in range(2):
+            while k < len(s) and s[k] == " ":
+                k += 1
+            if k < len(s) and s[k] == "{":
+                depth, start = 0, k
+                while k < len(s):
+                    depth += {"{": 1, "}": -1}.get(s[k], 0)
+                    k += 1
+                    if depth == 0:
+                        break
+                args.append(s[start:k])
+            elif k < len(s):
+                args.append("{" + s[k] + "}")
+                k += 1
+        out.append("".join(args))
+        i = k
+    out.append(s[i:])
+    return "".join(out)
+
+
 def clean_latex(s: str) -> str:
     s = re.sub(r"\\[dt]frac", r"\\frac", s)
+    s = _brace_frac_arguments(s)
+    s = re.sub(r"\\sqrt\s*([0-9a-zA-Z])", r"\\sqrt{\1}", s)   # \sqrt2 -> \sqrt{2}
     s = re.sub(r"\\(?:left|right|displaystyle|!|,|;|:|\s)", "", s)
     s = re.sub(r"\^\{?\\circ\}?", "", s)
     s = re.sub(r"\\(?:text|mathrm|textbf|mbox)\{([^{}]*)\}", r"\1", s)

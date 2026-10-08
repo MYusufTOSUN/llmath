@@ -146,8 +146,11 @@ def _math_verify_equal(expected: str, candidates: list[str]) -> bool | None:
         if not answer:
             continue
         seen = True
+        options = _kwargs(mv_verify, "timeout_seconds")
+        if "allow_set_relation_comp" in inspect.signature(mv_verify).parameters:
+            options["allow_set_relation_comp"] = True   # "(2, 3)" and "2 < x < 3" match both ways
         try:
-            if mv_verify(gold, answer, **_kwargs(mv_verify, "timeout_seconds")):
+            if mv_verify(gold, answer, **options):
                 return True
         except Exception:
             continue

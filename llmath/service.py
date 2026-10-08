@@ -71,6 +71,7 @@ def record(session: Session, run: Run, question_text: str, question_id: str | No
         output_tokens=response.output_tokens if response else None,
         cost_usd=response.cost_usd if response else None,
         latency_ms=response.latency_ms if response else None,
+        finish_reason=response.finish_reason if response else None,
         error=result.error,
     )
     session.add(row)
