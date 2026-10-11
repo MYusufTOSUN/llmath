@@ -70,6 +70,22 @@ Her kararın hangi katmanda verildiği veritabanına yazılır; böylece katmanl
 
 Ucuz model soruyu hem CoT hem PoT ile çözer. İki cevap uyuşursa kabul edilir, uyuşmazsa soru güçlü modele gönderilir. Analiz kayıtlı cevaplar üzerinde yapılır, ek API çağrısı gerektirmez; doğruluk (Wilson %95 güven aralığı), güçlü model çağrısı sayısı, maliyet ve süre raporlanır, güçlü modelle fark McNemar testiyle sınanır. Pilotta Qwen3 8B → Gemini Flash-Lite kademesi 40 sorunun 37'sini doğru çözdü (güçlü model tek başına 38/40) ve güçlü modeli 40 yerine 15 kez çağırdı.
 
+## İlk ana deney (main-1)
+
+Ana setin 500 sorusu Qwen3 8B (yerel) ve Gemini 3.5 Flash-Lite (ücretsiz API) ile adım adım (CoT) ve SymPy koduyla (PoT) çözüldü: 2.000 cevap, sıcaklık 0, istem sürümü v0.1.
+
+| Model | CoT | PoT |
+| --- | --- | --- |
+| Gemini 3.5 Flash-Lite | %97,8 (489/500) | %90,8 (454/500) |
+| Qwen3 8B | %89,4 (447/500) | %78,8 (394/500) |
+
+- **Türkçe–İngilizce:** Aynı sorular karşılaştırıldığında Qwen3 8B Türkçede anlamlı biçimde geride kalıyor. CoT'ta fark GSM8K'da −9,2, MATH'te −11,3 puan (McNemar p = 0,003 ve 0,049). Gemini'de CoT için anlamlı fark yok; PoT'ta MATH sorularında fark −11,3 puan (p = 0,022).
+- **CoT ve PoT:** CoT, iki modelde de iki dilde de PoT'den anlamlı ölçüde iyi.
+- **Kademeli çözüm:** Qwen'in CoT ve PoT cevapları uyuşursa cevap kabul ediliyor, uyuşmazsa soru Gemini'ye gidiyor. Doğruluk %97,4; Gemini tek başına %97,8 (p = 0,754). Gemini 500 yerine 126 kez çağrılıyor.
+- **Ondalık virgül:** İki model de PoT'ta Türkçe ondalık virgülü yanlış okuyor ("8,4" → `Rational(8, 4)`). Bu, pilotta görülen hatanın aynısı.
+
+Ayrıntılı tablolar `python scripts/report.py --name main-1 --cascade qwen3-8b gemini-flash-lite --out outputs/main-1.md` ile üretilir.
+
 ## Hata etiketleme (`llmath/taxonomy.py`)
 
 Her yanlış cevapta ilk hatalı adım bulunur. Ardından iki etiket verilir: hatanın doğduğu Newman aşaması (okuma, anlama, dönüştürme, işlem, kodlama) ve 13 hata türünden biri. H1–H9 Li vd. (2024)'ten alındı; H10–H13 bu projede eklendi, H10 Türkçeye özgüdür (Türkçe ifadeyi ya da sayı yazımını yanlış okuma). İki ölçüm etiketi model hatası sayılmaz: Y1 "cevap aslında doğru" doğrulayıcının yanlış negatiflerini, Y2 "soru ya da cevap anahtarı hatalı" veri hatalarını kaydeder. Her türün tanımı ve Türkçe örneği kod kitabındadır (`python -m llmath.taxonomy`).
