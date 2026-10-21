@@ -138,11 +138,24 @@ Kumaş setinde Qwen'in 45 Türkçe programının 20'sinde bölünme var; bu oran
 
 Tablolar: `python scripts/number_format_report.py --model qwen3-8b` (Gemini için `--model gemini-flash-lite`).
 
+## Düşünen modeller (ölçüm)
+
+DeepSeek-R1 8B, Phi-4-mini-reasoning ve Qwen3 8B'nin düşünme açık hâli ana setin tamamına geçmeden önce 20 soruluk sabit bir örneklemde ölçülür (`data/main_v1_sample20.jsonl`, `scripts/build_sample_set.py`). Sorular main-1'den alındığı için sonuçlar main-1'le soru soru karşılaştırılabilir.
+
+İlk ölçümde (sıcaklık 0, 8192 token bağlam) Qwen3 iyi çalıştı: CoT'de 20 sorunun 19'u doğru, düşünme kapalıyken 17'siydi. DeepSeek-R1 ile Phi'nin çıktıları ise tekrar döngüsüne girdi; ikisi de PoT'de hiç kod üretemedi (0/20). Bunun iki sebebi var. Bu modellerin yayıncıları açgözlü seçim (sıcaklık 0) önermiyor. Ayrıca uzun düşünme 8192 tokenlik bağlama sığmıyor; sınır aşılınca soru metni bağlamdan düşüyor.
+
+Bu yüzden düşünen modeller kendi önerilen ayarlarıyla çalışır:
+- sıcaklık 0,6, top_p 0,95, Qwen3 için ayrıca top_k 20;
+- 16.384 token bağlam;
+- tekrarlanabilirlik için sabit tohum (`llmath/config.py`, `REASONING`).
+
+Öteki modeller main-1'deki gibi sıcaklık 0 ile çalışır. LLM-hakem de her zaman sıcaklık 0 ile çalışır. Her çalıştırmada kullanılan ayarlar çalıştırma kaydına (`config.sampling`) yazılır.
+
 ## Hata etiketleme (`llmath/taxonomy.py`)
 
 Her yanlış cevapta ilk hatalı adım bulunur. Ardından iki etiket verilir: hatanın doğduğu Newman aşaması (okuma, anlama, dönüştürme, işlem, kodlama) ve 13 hata türünden biri. H1–H9 Li vd. (2024)'ten alındı; H10–H13 bu projede eklendi, H10 Türkçeye özgüdür (Türkçe ifadeyi ya da sayı yazımını yanlış okuma). İki ölçüm etiketi model hatası sayılmaz: Y1 "cevap aslında doğru" doğrulayıcının yanlış negatiflerini, Y2 "soru ya da cevap anahtarı hatalı" veri hatalarını kaydeder. Her türün tanımı ve Türkçe örneği kod kitabındadır (`python -m llmath.taxonomy`). Yarıda kalan bir çıktıda tür olarak görünen ilk hata seçilir; yarıda kalma ayrıca H13 olarak sayılır ve bunu sistem token sınırı ya da zaman aşımı kaydından kendisi çıkarır.
 
-Etiketleme arayüzün **Hata etiketleme** sayfasından yapılır. Yanlış cevaplar sabit bir rastgele sırayla gelir, böylece ilk N etiket rastgele bir örneklem olur. Başka etiketleyicilerin ve LLM-hakemin etiketleri gösterilmez. Plan, LLM-hakemin bütün yanlışlara ön etiket vermesi ve en az 150 insan etiketiyle uyumun kappa ile ölçülmesidir.
+Etiketleme arayüzün **Hata etiketleme** sayfasından yapılır. Yanlış cevaplar sabit bir rastgele sırayla gelir, böylece ilk N etiket rastgele bir örneklem olur. Başka etiketleyicilerin ve LLM-hakemin etiketleri gösterilmez. LLM-hakem bütün yanlışlara ön etiket verir. Uyumu ölçmek için insan etiketleri main-1'in GSM8K (P1) ve şablon (P3) sorularındaki 91 yanlış cevabın tamamına verilir (hedef 90). MATH (P2) yarışma soruları yalnız etiketleyen eminse etiketlenir. Bu yüzden MATH sorularındaki hata türleri yalnız LLM-hakemle belirlenmiş olur; bu bir sınırlılıktır. Sayfa main-1 ve "P1 + P3" seçimiyle açılır. Okunacak çözümü olmayan satırlar (düzeltme çalıştırmasının karar satırları) kuyruğa girmez.
 
 **LLM-hakem** (`llmath/judge.py`) soruyu, cevap anahtarını, numaralı çözüm adımlarını (PoT'de kod satırlarını), program çıktısını ve doğrulayıcının kararını kod kitabıyla birlikte görür. JSON olarak hata türünü, Newman aşamasını, ilk hatalı adımı ve kısa bir gerekçe verir. Adımlar etiketleme sayfasındakiyle aynı biçimde numaralanır, böylece insan ve hakem aynı adım numarasını kullanır. Etiketler `llm:<hakem>/<sürüm>` adıyla saklanır (şu an `j0.3`); istem ya da kod kitabı değişince sürüm artırılır, eski etiketler karşılaştırma için kalır. Hakem, cevabı veren modelle aynı aileden olamaz: modeller kendi ailelerinin çıktısına daha hoşgörülü davranabildiği için Gemini, Gemini'nin cevaplarını etiketlemez. Damıtılmış modeller temel modelin ailesinden de sayılır; örneğin Ollama'daki DeepSeek-R1 8B, Qwen3-8B üzerine kurulu olduğu için Qwen'le aynı aileden kabul edilir. İnsan etiketleriyle uyum `--agreement` ile hesaplanır (hata türü ve aşama için Cohen kappa, ilk hatalı adımda birebir uyum).
 

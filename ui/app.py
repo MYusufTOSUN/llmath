@@ -22,10 +22,14 @@ LABELS = {**STRATEGIES, "pot_fix": "PoT, hata geri bildirimiyle", "consistency":
           "refine": "Geri bildirimle düzeltilmiş"}
 STATUS = {"correct": ("✅", "Doğru"), "incorrect": ("❌", "Yanlış"), "unparsed": ("⚠️", "Doğrulanamadı")}
 INTERACTIVE_RUN = "etkileşimli"
-ANNOTATION_TARGET = 150   # human labels planned for the agreement (kappa) check with the LLM judge
+# Human labels for the agreement (kappa) check with the LLM judge: all GSM8K and template errors of
+# main-1 (91 answers), MATH items only when the annotator is sure (author's decision, 2026-10-21).
+ANNOTATION_TARGET = 90
 ANNOTATION_RUN = "main-1"   # the run the LLM judge labels, so human labels are collected there
-SUBSET_LABELS = {"(hepsi)": "Hepsi", "P1": "P1 · GSM8K, ilköğretim sözel problemleri",
-                 "P2": "P2 · MATH, yarışma problemleri (zor)", "P3": "P3 · Türkçe şablon soruları"}
+ANNOTATION_SCOPE = "P1,P3"
+SUBSET_LABELS = {"(hepsi)": "Hepsi", ANNOTATION_SCOPE: "P1 + P3 · insan etiketlemesinin kapsamı",
+                 "P1": "P1 · GSM8K, ilköğretim sözel problemleri", "P2": "P2 · MATH, yarışma problemleri (zor)",
+                 "P3": "P3 · Türkçe şablon soruları"}
 # Categorical slots 1-2 of the reference palette, validated for light and dark surfaces.
 SERIES = {"light": ("#2a78d6", "#eb6834"), "dark": ("#3987e5", "#d95926")}
 
@@ -330,8 +334,11 @@ def page_annotate() -> None:
     models = sorted({row["model"] for row in summary})
     model = right.selectbox("Model", ["(hepsi)"] + models)
     sub_col, strategy_col = st.columns(2)
-    subset = sub_col.selectbox("Alt küme", ["(hepsi)"] + sorted({row["subset"] for row in summary}),
-                               format_func=lambda s: SUBSET_LABELS.get(s, s))
+    subsets = sorted({row["subset"] for row in summary})
+    options = ["(hepsi)"] + ([ANNOTATION_SCOPE] if {"P1", "P3"} <= set(subsets) else []) + subsets
+    subset = sub_col.selectbox("Alt küme", options, index=options.index(ANNOTATION_SCOPE) if ANNOTATION_SCOPE in options
+                               else 0, format_func=lambda s: SUBSET_LABELS.get(s, s),
+                               help="P2 (MATH) sorularını yalnız eminseniz etiketleyin; emin değilseniz 'Atla'.")
     strategy = strategy_col.selectbox("Strateji", ["(hepsi)", "cot", "pot"], format_func=lambda s: LABELS.get(s, s))
     skipped: list[int] = st.session_state.setdefault("skipped", [])
     params = {"annotator": annotator, "skip": ",".join(map(str, skipped))}

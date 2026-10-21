@@ -102,8 +102,8 @@ def next_to_annotate(session: Session, run_id: int, annotator: str, model: str |
                     or_(Response.raw_output.is_not(None), Response.code.is_not(None))))
     if model:
         query = query.where(Response.model_key == model)
-    if subset:
-        query = query.where(Question.subset == subset)
+    if subset:   # one subset or several, comma-separated ("P1,P3")
+        query = query.where(Question.subset.in_(subset.split(",")))
     if strategy:
         query = query.where(Response.strategy == strategy)
     rows = session.execute(query).all()

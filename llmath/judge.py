@@ -267,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
             if judge.provider != "ollama":
                 time.sleep(max(0.0, last[0] + args.pause - time.monotonic()))
             try:
-                return chat(judge, messages)
+                return chat(judge, messages, temperature=0.0)   # labels stay deterministic for every judge
             finally:
                 last[0] = time.monotonic()
 

@@ -110,7 +110,8 @@ def test_judge_labels_other_families_and_reminds_once_after_a_bad_reply(wrong_an
                                 '"explanation": "2 + 3 yanlış toplandı."}'])
     sent = []
 
-    def fake_chat(spec, messages):
+    def fake_chat(spec, messages, temperature=None):
+        assert temperature == 0.0   # the judge always labels greedily
         sent.append(messages)
         return LLMResponse(next(replies), None, 10, 5, 100, 0.0)
 

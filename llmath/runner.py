@@ -20,6 +20,7 @@ from sqlalchemy import select
 from .config import MODELS, PILOT_FILE
 from .dataset import import_questions
 from .db import Question, Response, SessionLocal
+from .llm import sampling
 from .prompts import VARIANTS, prompt_version_for
 from .service import get_or_create_run, model_status, record, solve_and_verify, summarize
 
@@ -50,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
         run = get_or_create_run(session, args.name, {"data": args.data.name, "models": args.models,
                                                      "strategies": args.strategies, "prompt_version": version,
                                                      "subsets": args.subsets, "langs": args.langs})
+        # The sampling settings of every model that answers in this run, also when one is added later.
+        run.config = {**run.config, "sampling": {**run.config.get("sampling", {}),
+                                                 **{key: sampling(MODELS[key]) for key in args.models}}}
         session.commit()
         query = select(Question).where(Question.id.in_(ids), Question.lang.in_(args.langs))
         if args.subsets:

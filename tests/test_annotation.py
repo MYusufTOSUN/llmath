@@ -77,6 +77,8 @@ def test_annotation_queue_is_blind_and_labels_can_be_replaced():
             filtered = client.get(url, params={"annotator": "human", "subset": other}).json()
             assert (filtered["remaining"], filtered["item"], filtered["done_in_run"]) == (0, None, 1)
             assert client.get(url, params={"annotator": "human", "strategy": "pot"}).json()["remaining"] == 0
+            several = f"{other},{question['subset']}"   # comma-separated subsets, as in "P1,P3"
+            assert client.get(url, params={"annotator": "human", "subset": several}).json()["remaining"] == 1
             assert client.get(url, params={"annotator": "human", "subset": question["subset"],
                                            "strategy": "cot"}).json()["remaining"] == 1
             assert client.get(url, params={"annotator": "llm-hakem"}).json()["done"] == 0   # labels per annotator

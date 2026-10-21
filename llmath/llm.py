@@ -26,7 +26,9 @@ class LLMError(RuntimeError):
     pass
 
 
-def chat(spec: ModelSpec, messages: list[dict[str, str]], temperature: float = 0.0) -> LLMResponse:
+def chat(spec: ModelSpec, messages: list[dict[str, str]], temperature: float | None = None) -> LLMResponse:
+    """One model call; the sampling settings come from the model spec unless a temperature is given."""
+    temperature = spec.temperature if temperature is None else temperature
     if spec.provider == "ollama":
         return _ollama_chat(spec, messages, temperature)
     if spec.provider == "litellm":
@@ -34,12 +36,20 @@ def chat(spec: ModelSpec, messages: list[dict[str, str]], temperature: float = 0
     raise ValueError(f"bilinmeyen sağlayıcı: {spec.provider}")
 
 
+def sampling(spec: ModelSpec) -> dict:
+    """The settings a model is called with, as recorded in a run's config."""
+    keys = ("temperature", "top_p", "top_k", "seed", "num_ctx", "max_tokens", "think")
+    return {key: getattr(spec, key) for key in keys if getattr(spec, key) is not None}
+
+
 def _ollama_chat(spec: ModelSpec, messages: list[dict[str, str]], temperature: float) -> LLMResponse:
+    options = {"temperature": temperature, "num_ctx": spec.num_ctx, "num_predict": spec.max_tokens}
+    options.update({key: getattr(spec, key) for key in ("top_p", "top_k", "seed") if getattr(spec, key) is not None})
     payload: dict = {
         "model": spec.model,
         "messages": messages,
         "stream": False,
-        "options": {"temperature": temperature, "num_ctx": 8192, "num_predict": spec.max_tokens},
+        "options": options,
     }
     if spec.think is not None:
         payload["think"] = spec.think
