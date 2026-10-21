@@ -109,10 +109,20 @@ def is_truncated(finish_reason: str | None, exec_error: str | None) -> bool:
 def solution_steps(solution: str) -> list[str]:
     """The numbered steps a CoT label refers to: paragraphs, or lines when there is a single paragraph.
 
-    The labelling page and the LLM judge both number steps with this, so their step numbers agree.
+    A displayed formula (\\[ ... \\] or $$ ... $$) that contains a blank line stays in one step, so it
+    is never cut in two. The labelling page and the LLM judge both number steps with this, so their
+    step numbers agree.
     """
     parts = [p.strip() for p in re.split(r"\n\s*\n", solution) if p.strip()]
-    return parts if len(parts) > 1 else [line for line in solution.splitlines() if line.strip()]
+    if len(parts) <= 1:
+        return [line for line in solution.splitlines() if line.strip()]
+    steps, current = [], ""
+    for part in parts:
+        current = f"{current}\n\n{part}" if current else part
+        if current.count("\\[") <= current.count("\\]") and current.count("$$") % 2 == 0:
+            steps.append(current)
+            current = ""
+    return steps + ([current] if current else [])
 
 
 def codebook_markdown() -> str:

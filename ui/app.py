@@ -23,6 +23,9 @@ LABELS = {**STRATEGIES, "pot_fix": "PoT, hata geri bildirimiyle", "consistency":
 STATUS = {"correct": ("✅", "Doğru"), "incorrect": ("❌", "Yanlış"), "unparsed": ("⚠️", "Doğrulanamadı")}
 INTERACTIVE_RUN = "etkileşimli"
 ANNOTATION_TARGET = 150   # human labels planned for the agreement (kappa) check with the LLM judge
+ANNOTATION_RUN = "main-1"   # the run the LLM judge labels, so human labels are collected there
+SUBSET_LABELS = {"(hepsi)": "Hepsi", "P1": "P1 · GSM8K, ilköğretim sözel problemleri",
+                 "P2": "P2 · MATH, yarışma problemleri (zor)", "P3": "P3 · Türkçe şablon soruları"}
 # Categorical slots 1-2 of the reference palette, validated for light and dark surfaces.
 SERIES = {"light": ("#2a78d6", "#eb6834"), "dark": ("#3987e5", "#d95926")}
 
@@ -45,10 +48,21 @@ def call(method: str, path: str, **kwargs):
     return response.json()
 
 
+_MATH_SPAN = re.compile(r"\$\$.*?\$\$|\$[^$\n]+\$", re.DOTALL)
+_BOXED = re.compile(r"\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}")
+
+
 def as_markdown(text: str) -> str:
-    """Streamlit renders $...$ and $$...$$, but models often write \\( \\) and \\[ \\]."""
+    """Streamlit renders $...$ and $$...$$, but models often write \\( \\) and \\[ \\], and leave the
+    final \\boxed{...} outside any math, where it would show as raw LaTeX."""
     text = re.sub(r"\\\[(.+?)\\\]", lambda m: "$$" + m.group(1) + "$$", text, flags=re.DOTALL)
-    return re.sub(r"\\\((.+?)\\\)", lambda m: "$" + m.group(1) + "$", text, flags=re.DOTALL)
+    text = re.sub(r"\\\((.+?)\\\)", lambda m: "$" + m.group(1) + "$", text, flags=re.DOTALL)
+    pieces, last = [], 0
+    for match in _MATH_SPAN.finditer(text):
+        pieces += [_BOXED.sub(lambda m: f"${m.group(0)}$", text[last:match.start()]), match.group(0)]
+        last = match.end()
+    pieces.append(_BOXED.sub(lambda m: f"${m.group(0)}$", text[last:]))
+    return "".join(pieces)
 
 
 def wilson_low(correct: int, n: int, z: float = 1.96) -> float:
@@ -305,19 +319,29 @@ def page_annotate() -> None:
         st.info("Etiketlenecek toplu deney yok.")
         return
     left, middle, right = st.columns([2, 1, 1])
-    run = left.selectbox("Çalıştırma", runs, format_func=lambda r: f"#{r['id']} · {r['name']}")
+    names = [r["name"] for r in runs]
+    run = left.selectbox("Çalıştırma", runs, index=names.index(ANNOTATION_RUN) if ANNOTATION_RUN in names else 0,
+                         format_func=lambda r: f"#{r['id']} · {r['name']}",
+                         help=f"İnsan etiketleri {ANNOTATION_RUN} için toplanıyor; LLM-hakem de bu çalıştırmayı etiketliyor.")
     annotator = middle.text_input("Etiketleyen", value="human",
                                   help="İkinci bir etiketleyici kendi adını yazar; uyum etiketleyenler "
                                        "arasında ölçülür.")
-    models = sorted({row["model"] for row in call("GET", f"/runs/{run['id']}/summary")})
+    summary = call("GET", f"/runs/{run['id']}/summary")
+    models = sorted({row["model"] for row in summary})
     model = right.selectbox("Model", ["(hepsi)"] + models)
+    sub_col, strategy_col = st.columns(2)
+    subset = sub_col.selectbox("Alt küme", ["(hepsi)"] + sorted({row["subset"] for row in summary}),
+                               format_func=lambda s: SUBSET_LABELS.get(s, s))
+    strategy = strategy_col.selectbox("Strateji", ["(hepsi)", "cot", "pot"], format_func=lambda s: LABELS.get(s, s))
     skipped: list[int] = st.session_state.setdefault("skipped", [])
     params = {"annotator": annotator, "skip": ",".join(map(str, skipped))}
-    if model != "(hepsi)":
-        params["model"] = model
+    for key, value in (("model", model), ("subset", subset), ("strategy", strategy)):
+        if value != "(hepsi)":
+            params[key] = value
     data = call("GET", f"/runs/{run['id']}/annotation/next", params=params)
-    st.progress(min(data["done"] / ANNOTATION_TARGET, 1.0),
-                text=f"{data['done']} cevap etiketlendi (hedef en az {ANNOTATION_TARGET}) · {data['remaining']} kaldı")
+    st.progress(min(data["done_in_run"] / ANNOTATION_TARGET, 1.0),
+                text=f"Bu çalıştırmada {data['done_in_run']} cevap etiketlediniz (hedef en az {ANNOTATION_TARGET}) "
+                     f"· bu seçimde {data['remaining']} cevap kaldı")
     item = data["item"]
     if item is None:
         st.success("Bu seçimde etiketlenecek yanlış cevap kalmadı.")

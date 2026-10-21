@@ -152,13 +152,14 @@ def taxonomy() -> dict:
 
 
 @app.get("/runs/{run_id}/annotation/next")
-def annotation_next(run_id: int, annotator: str = "human", model: str | None = None, skip: str = "") -> dict:
+def annotation_next(run_id: int, annotator: str = "human", model: str | None = None, skip: str = "",
+                    subset: str | None = None, strategy: str | None = None) -> dict:
     """Next wrong answer to label; labels by other annotators are never returned (blind labelling)."""
     skipped = frozenset(int(part) for part in skip.split(",") if part.strip().isdigit())
     with SessionLocal() as session:
         if session.get(Run, run_id) is None:
             raise HTTPException(404, "çalıştırma bulunamadı")
-        return next_to_annotate(session, run_id, annotator, model, skipped)
+        return next_to_annotate(session, run_id, annotator, model, skipped, subset, strategy)
 
 
 @app.post("/annotations")

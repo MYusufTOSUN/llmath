@@ -38,7 +38,8 @@ from .taxonomy import ERROR_TYPES, MEASUREMENT_CODES, NEWMAN_STAGES, is_truncate
 # Bump on any change to the judge prompt or the codebook; it is part of the annotator name.
 # j0.1 -> j0.2 (2026-10-21): H3 now sends misreadings of Turkish number writing to H10 (never used).
 # j0.2 -> j0.3 (2026-10-21): the author's codebook review (H5/H6/H8/H10/H11/H12/H13 wording, H10 under okuma).
-JUDGE_VERSION = "j0.3"
+# j0.3 -> j0.4 (2026-10-21): step numbering keeps a displayed formula in one step. j0.2 and j0.3 produced no labels.
+JUDGE_VERSION = "j0.4"
 
 SYSTEM = ("Sen matematik çözümlerindeki hataları bir kod kitabına göre sınıflandıran titiz bir "
           "değerlendiricisin. Yalnızca istenen JSON nesnesini yazarsın.")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import MODELS, ModelSpec, has_api_key
@@ -86,20 +86,31 @@ def record(session: Session, run: Run, question_text: str, question_id: str | No
 
 
 def next_to_annotate(session: Session, run_id: int, annotator: str, model: str | None = None,
-                     skip: frozenset[int] = frozenset()) -> dict:
+                     skip: frozenset[int] = frozenset(), subset: str | None = None,
+                     strategy: str | None = None) -> dict:
     """The next wrong or unverified answer this annotator has not labelled yet.
 
     Answers come in a fixed pseudo-random order, so a sample of the first N labelled answers is a
     random sample of the run's errors; other annotators' labels are never shown (blind labelling).
+    Answers with no solution to read (the decision rows of a refinement run) are left out. `done` and
+    `remaining` count the current selection, `done_in_run` the annotator's labels in the whole run.
     """
     query = (select(Response, Verification, Question)
              .join(Verification, Verification.response_id == Response.id)
              .join(Question, Question.id == Response.question_id)
-             .where(Response.run_id == run_id, Response.error.is_(None), Verification.status != "correct"))
+             .where(Response.run_id == run_id, Response.error.is_(None), Verification.status != "correct",
+                    or_(Response.raw_output.is_not(None), Response.code.is_not(None))))
     if model:
         query = query.where(Response.model_key == model)
+    if subset:
+        query = query.where(Question.subset == subset)
+    if strategy:
+        query = query.where(Response.strategy == strategy)
     rows = session.execute(query).all()
     labelled = set(session.scalars(select(Annotation.response_id).where(Annotation.annotator == annotator)))
+    done_in_run = session.scalar(select(func.count()).select_from(Annotation)
+                                 .join(Response, Response.id == Annotation.response_id)
+                                 .where(Annotation.annotator == annotator, Response.run_id == run_id))
     todo = [row for row in rows if row[0].id not in labelled]
     todo.sort(key=lambda row: hashlib.sha256(f"{run_id}:{row[0].id}".encode()).hexdigest())
     pending = [row for row in todo if row[0].id not in skip]
@@ -112,7 +123,7 @@ def next_to_annotate(session: Session, run_id: int, annotator: str, model: str |
                 "status": verification.status, "layer": verification.layer, "detail": verification.detail,
                 "solution": response.raw_output, "code": response.code, "exec_stdout": response.exec_stdout,
                 "exec_error": response.exec_error, "finish_reason": response.finish_reason}
-    return {"done": len(rows) - len(todo), "remaining": len(todo), "item": item}
+    return {"done": len(rows) - len(todo), "remaining": len(todo), "done_in_run": done_in_run, "item": item}
 
 
 def save_annotation(session: Session, response_id: int, annotator: str, error_type: str,
