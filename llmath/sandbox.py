@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -89,7 +90,26 @@ def run_code(code: str, timeout: float = 15.0) -> ExecResult:
         except subprocess.TimeoutExpired as exc:
             return ExecResult(ok=False, stdout=_text(exc.stdout), stderr="zaman aşımı",
                               timed_out=True)
-    return ExecResult(ok=proc.returncode == 0, stdout=proc.stdout, stderr=proc.stderr[-2000:])
+    return ExecResult(ok=proc.returncode == 0, stdout=proc.stdout, stderr=tidy_traceback(proc.stderr)[-2000:])
+
+
+_FRAME = re.compile(r'File "([^"]+)"')
+
+
+def _short_path(path: str) -> str:
+    parts = re.split(r"[\\/]", path)
+    for marker in ("site-packages", "Lib", "lib"):
+        if marker in parts:
+            return "/".join(parts[len(parts) - parts[::-1].index(marker):])
+    return parts[-1]
+
+
+def tidy_traceback(text: str) -> str:
+    """A traceback without local paths, which name the user: library files as sympy/..., the program as solution.py.
+
+    Error messages are shown to models (refinement, LLM judge), so they must not leak the machine's paths.
+    """
+    return _FRAME.sub(lambda m: f'File "{_short_path(m.group(1))}"', text)
 
 
 def child_env(tmp: str) -> dict[str, str]:

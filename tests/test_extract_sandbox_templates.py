@@ -1,5 +1,5 @@
 from llmath.extract import extract_answer, extract_code
-from llmath.sandbox import check_code, child_env, run_code
+from llmath.sandbox import check_code, child_env, run_code, tidy_traceback
 from llmath.templates import TEMPLATES, generate
 from llmath.verify import verify
 
@@ -53,6 +53,15 @@ def test_sandbox_hides_api_keys(monkeypatch):
 def test_sandbox_timeout():
     result = run_code("while True:\n    pass", timeout=2)
     assert result.timed_out and not result.ok
+
+
+def test_tracebacks_carry_no_local_paths():
+    result = run_code("from sympy import Rational\nprint(Rational(1, 0) + undefined_name)")
+    assert "solution.py" in result.stderr and "NameError" in result.stderr
+    assert "Users" not in result.stderr and "llmath_" not in result.stderr
+    stored = ('File "C:\\Users\\Ali Veli\\proje\\.venv\\Lib\\site-packages\\sympy\\core\\numbers.py", line 3\n'
+              'File "C:\\Users\\Ali Veli\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\fractions.py", line 9')
+    assert tidy_traceback(stored) == 'File "sympy/core/numbers.py", line 3\nFile "fractions.py", line 9'
 
 
 def test_templates_are_deterministic_and_self_consistent():

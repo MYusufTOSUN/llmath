@@ -28,6 +28,8 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | API + arayüz | `baslat.bat` dosyasına çift tıklayın (ya da `.\baslat.ps1`) → arayüz http://localhost:8501, API belgeleri http://127.0.0.1:8000/docs. `baslat.bat` gerekirse Ollama'yı da açar, ikisi zaten çalışıyorsa yalnız tarayıcıyı açar |
 | Bir çalıştırmanın Markdown raporu | `python scripts/report.py --name main-1 --cascade qwen3-8b gemini-flash-lite --out outputs/main-1.md` |
 | Kademeli çözüm analizi (AS2) | `python -m llmath.cascade --run pilot-1 --cheap qwen3-8b --strong gemini-flash-lite` |
+| Geri bildirimle düzeltme | `python -m llmath.refine --base main-1 --models gemini-flash-lite` (sonuçlar `main-1-refine` adıyla saklanır) |
+| LLM-hakem ön etiketleri | `python -m llmath.judge --run main-1 --judge gemini-flash --models qwen3-8b`; insan etiketleriyle uyum için `--agreement` |
 | Testler | `python -m pytest` |
 | Hata etiketleme kod kitabı | `python -m llmath.taxonomy` |
 | Bir çalıştırmayı güncel sandbox ve doğrulayıcıyla yeniden değerlendir | `python scripts/reverify.py --name main-1` (model yeniden çağrılmaz; değişenler `outputs/reverify-main-1-<zaman>.csv`) |
@@ -106,13 +108,24 @@ PoT istemi üç biçimde denenir:
 
 Her yanlış cevapta ilk hatalı adım bulunur. Ardından iki etiket verilir: hatanın doğduğu Newman aşaması (okuma, anlama, dönüştürme, işlem, kodlama) ve 13 hata türünden biri. H1–H9 Li vd. (2024)'ten alındı; H10–H13 bu projede eklendi, H10 Türkçeye özgüdür (Türkçe ifadeyi ya da sayı yazımını yanlış okuma). İki ölçüm etiketi model hatası sayılmaz: Y1 "cevap aslında doğru" doğrulayıcının yanlış negatiflerini, Y2 "soru ya da cevap anahtarı hatalı" veri hatalarını kaydeder. Her türün tanımı ve Türkçe örneği kod kitabındadır (`python -m llmath.taxonomy`).
 
-Etiketleme arayüzün **Hata etiketleme** sayfasından yapılır. Yanlış cevaplar sabit bir rastgele sırayla gelir, böylece ilk N etiket rastgele bir örneklem olur. Başka etiketleyicilerin ve LLM-hakemin etiketleri gösterilmez. Plan, LLM-hakemin bütün yanlışlara ön etiket vermesi ve en az 150 insan etiketiyle uyumun kappa ile ölçülmesidir; LLM-hakem henüz eklenmedi.
+Etiketleme arayüzün **Hata etiketleme** sayfasından yapılır. Yanlış cevaplar sabit bir rastgele sırayla gelir, böylece ilk N etiket rastgele bir örneklem olur. Başka etiketleyicilerin ve LLM-hakemin etiketleri gösterilmez. Plan, LLM-hakemin bütün yanlışlara ön etiket vermesi ve en az 150 insan etiketiyle uyumun kappa ile ölçülmesidir.
+
+**LLM-hakem** (`llmath/judge.py`) soruyu, cevap anahtarını, numaralı çözüm adımlarını (PoT'de kod satırlarını), program çıktısını ve doğrulayıcının kararını kod kitabıyla birlikte görür. JSON olarak hata türünü, Newman aşamasını, ilk hatalı adımı ve kısa bir gerekçe verir. Adımlar etiketleme sayfasındakiyle aynı biçimde numaralanır, böylece insan ve hakem aynı adım numarasını kullanır. Etiketler `llm:<hakem>/j0.1` adıyla saklanır. Hakem, cevabı veren modelle aynı aileden olamaz: modeller kendi ailelerinin çıktısına daha hoşgörülü davranabildiği için Gemini, Gemini'nin cevaplarını etiketlemez. İnsan etiketleriyle uyum `--agreement` ile hesaplanır (hata türü ve aşama için Cohen kappa, ilk hatalı adımda birebir uyum).
+
+## Geri bildirimle düzeltme (`llmath/refine.py`)
+
+Başlangıç noktası, modelin önceki bir çalıştırmadaki CoT ve PoT cevaplarıdır. Cevap anahtarı modele hiçbir aşamada gösterilmez.
+
+- **F1, çalıştırma geri bildirimi:** Cevap üretmeyen PoT programı (kod yok, sandbox reddi, çalışma hatası, zaman aşımı, boş çıktı) hata mesajıyla birlikte modele geri gönderilir; en fazla iki tur.
+- **F2, tutarlılık geri bildirimi:** CoT ve PoT cevapları hâlâ uyuşmuyorsa ya da biri eksikse model iki çözümü birlikte görür ve soruyu yeniden çözer.
+
+İki cevap uyuşursa CoT cevabı kabul edilir, uyuşmazsa F2'nin cevabı. Her model çağrısı ayrı satır olarak saklanır (`pot_fix`, `consistency`), nihai karar da `refine` stratejisiyle. Böylece düzeltme; CoT, PoT ve kademeli çözümle aynı sorularda karşılaştırılabilir. Kademeli çözümden farkı, uyuşmazlığı güçlü bir modele göndermek yerine modelin kendisine çözdürmesidir. Hata mesajlarındaki yerel dosya yolları modele gönderilmeden önce silinir.
 
 ## Klasör yapısı
 
 ```
 llmath/     çekirdek: ayarlar, LLM erişimi, istemler, çözücü, çıkarım, normalleştirme, doğrulama, sandbox,
-            veritabanı, hata taksonomisi
+            veritabanı, hata taksonomisi, kademeli çözüm, geri bildirimle düzeltme, LLM-hakem
 api/        FastAPI servisi
 ui/         Streamlit arayüzü (soru çözme, sonuçlar, hata etiketleme)
 scripts/    veri seti üretimi, çalıştırma raporu

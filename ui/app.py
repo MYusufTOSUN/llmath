@@ -13,8 +13,13 @@ import httpx
 import pandas as pd
 import streamlit as st
 
+from llmath.taxonomy import solution_steps
+
 API_URL = os.getenv("LLMATH_API_URL", "http://127.0.0.1:8000")
 STRATEGIES = {"cot": "Adım adım (CoT)", "pot": "SymPy kodu (PoT)"}
+# Strategies that only appear in stored runs (llmath.refine), never in the solve form.
+LABELS = {**STRATEGIES, "pot_fix": "PoT, hata geri bildirimiyle", "consistency": "Tutarlılık geri bildirimi",
+          "refine": "Geri bildirimle düzeltilmiş"}
 STATUS = {"correct": ("✅", "Doğru"), "incorrect": ("❌", "Yanlış"), "unparsed": ("⚠️", "Doğrulanamadı")}
 INTERACTIVE_RUN = "etkileşimli"
 ANNOTATION_TARGET = 150   # human labels planned for the agreement (kappa) check with the LLM judge
@@ -44,11 +49,6 @@ def as_markdown(text: str) -> str:
     """Streamlit renders $...$ and $$...$$, but models often write \\( \\) and \\[ \\]."""
     text = re.sub(r"\\\[(.+?)\\\]", lambda m: "$$" + m.group(1) + "$$", text, flags=re.DOTALL)
     return re.sub(r"\\\((.+?)\\\)", lambda m: "$" + m.group(1) + "$", text, flags=re.DOTALL)
-
-
-def solution_steps(solution: str) -> list[str]:
-    parts = [p.strip() for p in re.split(r"\n\s*\n", solution) if p.strip()]
-    return parts if len(parts) > 1 else [line for line in solution.splitlines() if line.strip()]
 
 
 def wilson_low(correct: int, n: int, z: float = 1.96) -> float:
@@ -157,9 +157,9 @@ def show_result(result: dict) -> None:
 # --- Sonuçlar --------------------------------------------------------------------------------
 
 def accuracy_chart(overall: pd.DataFrame) -> alt.Chart:
-    names = list(STRATEGIES.values())
+    names = list(LABELS.values())
     data = overall.assign(
-        strateji=overall["strategy"].map(STRATEGIES),
+        strateji=overall["strategy"].map(lambda k: LABELS.get(k, k)),
         dogruluk=(overall["accuracy"] * 100).round(1),
         etiket=(overall["accuracy"] * 100).round(0).astype(int).astype(str) + "% (" +
         overall["correct"].astype(str) + "/" + overall["n"].astype(str) + ")",
@@ -229,7 +229,7 @@ def page_results() -> None:
     overall = summary.groupby(["model", "strategy"], as_index=False)[["n", "correct", "unparsed"]].sum()
     overall["accuracy"] = overall["correct"] / overall["n"]
     best = overall.loc[overall.apply(lambda r: wilson_low(r["correct"], r["n"]), axis=1).idxmax()]
-    st.subheader(f"En yüksek doğruluk: {best['model']}, {STRATEGIES[best['strategy']]} — "
+    st.subheader(f"En yüksek doğruluk: {best['model']}, {LABELS.get(best['strategy'], best['strategy'])} — "
                  f"%{100 * best['accuracy']:.0f} ({best['correct']}/{best['n']})")
     st.caption("Sıralama, az soruyla elde edilen yüksek oranları öne çıkarmamak için %95 güven aralığının "
                "alt sınırına göre yapılır.")
@@ -327,7 +327,7 @@ def page_annotate() -> None:
         return
 
     rid = item["response_id"]
-    st.subheader(f"{item['question_id']} · {item['model']} · {STRATEGIES[item['strategy']]}")
+    st.subheader(f"{item['question_id']} · {item['model']} · {LABELS.get(item['strategy'], item['strategy'])}")
     st.markdown(as_markdown(item["question"]))
     cols = st.columns(3)
     cols[0].metric("Beklenen", item["gold"])

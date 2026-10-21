@@ -10,6 +10,7 @@ Kod kitabını yazdırmak için: python -m llmath.taxonomy
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 # Newman (1977): the stage of the solution in which the error first appears.
@@ -82,6 +83,15 @@ ERROR_TYPES: dict[str, ErrorType] = {t.code: t for t in [
 ]}
 
 MEASUREMENT_CODES = frozenset(code for code, t in ERROR_TYPES.items() if t.source == "ölçüm")
+
+
+def solution_steps(solution: str) -> list[str]:
+    """The numbered steps a CoT label refers to: paragraphs, or lines when there is a single paragraph.
+
+    The labelling page and the LLM judge both number steps with this, so their step numbers agree.
+    """
+    parts = [p.strip() for p in re.split(r"\n\s*\n", solution) if p.strip()]
+    return parts if len(parts) > 1 else [line for line in solution.splitlines() if line.strip()]
 
 
 def codebook_markdown() -> str:
