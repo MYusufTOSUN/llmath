@@ -3,7 +3,8 @@
 H1–H9 come from Li et al. (2024); H10–H13 are new in this project (H10 is specific to Turkish).
 Y1 and Y2 are not model errors: they record verifier mistakes (research question AS4) and faulty
 questions, so that neither is counted against a model. Every type has a definition and a Turkish
-example so that people and the LLM judge label alike. The wording is a first draft for review.
+example so that people and the LLM judge label alike. The wording is a first draft for review; the
+H3/H10 boundary was sharpened on 2026-10-21 after the judge filed decimal-comma splits under H3.
 
 Kod kitabını yazdırmak için: python -m llmath.taxonomy
 """
@@ -41,8 +42,9 @@ ERROR_TYPES: dict[str, ErrorType] = {t.code: t for t in [
               "Nesneleri, durumları ya da olasılıkları eksik veya fazla saymak.",
               "İki zarda toplamı 7 olan durumları 5 tane saymak (doğrusu 6)."),
     ErrorType("H3", "Bağlam değeri hatası", "okuma", "Li vd. 2024",
-              "Sorudaki bir sayıyı yanlış aktarmak ya da başka bir nicelikle karıştırmak.",
-              "Soruda saksısı 2,12 TL olan çiçeği çözümde 1,87 TL almak."),
+              "Sorudaki bir sayıyı yanlış aktarmak ya da başka bir nicelikle karıştırmak. Sayının Türkçe "
+              "yazımından (ondalık virgül, binlik nokta) doğan yanlış okumalar H3 değil H10'dur.",
+              "Soruda 35 TL olan fiyatı çözümde 53 TL almak; öğrenci sayısı yerine sınıf sayısını kullanmak."),
     ErrorType("H4", "Halüsinasyon", "anlama", "Li vd. 2024",
               "Soruda olmayan bir bilgiyi, koşulu ya da sayıyı çözüme katmak.",
               "Soruda indirim yokken fiyata %10 indirim uygulamak."),
@@ -62,8 +64,10 @@ ERROR_TYPES: dict[str, ErrorType] = {t.code: t for t in [
               "Önceki adımlarla ya da kendi içinde çelişen bir adım atmak.",
               "Bir adımda x = 4 bulup sonraki adımda x = 6 ile devam etmek."),
     ErrorType("H10", "Türkçe ifadeyi yanlış yorumlama", "anlama", "yeni",
-              "Türkçe bir sözcüğün, ekin, kalıbın ya da Türkçe sayı yazımının anlamını yanlış okumak.",
-              "\"6,5\" ondalık sayısını 6 ve 5 diye iki sayı okumak; \"en az\" ile \"en çok\"u karıştırmak."),
+              "Türkçe bir sözcüğün, ekin, kalıbın ya da Türkçe sayı yazımının (ondalık virgül, binlik nokta) "
+              "anlamını yanlış okumak.",
+              "\"6,5\" ondalık sayısını 6 ve 5 diye iki sayı okumak (PoT'de Rational(6, 5) yazmak); \"en az\" ile "
+              "\"en çok\"u karıştırmak."),
     ErrorType("H11", "Kod/araç hatası", "islem", "yeni",
               "PoT kodunun hata vermesi, çalışmaması ya da kurulan çözümü yanlış uygulaması.",
               "Tanımlanmamış bir değişken kullanıp NameError almak; sonucu yazdırmayı unutmak."),

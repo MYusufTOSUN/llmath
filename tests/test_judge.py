@@ -38,6 +38,13 @@ def test_judge_sees_numbered_steps_the_key_and_the_codebook():
     assert count == 2 and "  2| print(x + 4)" in messages[1]["content"] and "kod satırı" in messages[1]["content"]
 
 
+def test_codebook_sends_turkish_number_misreadings_to_h10():
+    # j0.1 used a decimal in H3's example, and the judge filed "8,4 -> Rational(8, 4)" under H3
+    assert "H10" in ERROR_TYPES["H3"].definition and "," not in ERROR_TYPES["H3"].example.split(";")[0]
+    assert "ondalık virgül" in ERROR_TYPES["H10"].definition
+    assert judge.annotator_name("gemini-flash-lite") == f"llm:gemini-flash-lite/{judge.JUDGE_VERSION}"
+
+
 def test_a_judge_may_not_label_its_own_family():
     gemini = MODELS["gemini-flash"]
     assert judge.same_family(gemini, "gemini-flash-lite")

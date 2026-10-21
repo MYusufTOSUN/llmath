@@ -35,7 +35,9 @@ from .sandbox import tidy_traceback
 from .service import model_status, save_annotation
 from .taxonomy import ERROR_TYPES, MEASUREMENT_CODES, NEWMAN_STAGES, solution_steps
 
-JUDGE_VERSION = "j0.1"   # bump on any change to the judge prompt; it is part of the annotator name
+# Bump on any change to the judge prompt or the codebook; it is part of the annotator name.
+# j0.1 -> j0.2 (2026-10-21): H3 now sends misreadings of Turkish number writing to H10.
+JUDGE_VERSION = "j0.2"
 
 SYSTEM = ("Sen matematik çözümlerindeki hataları bir kod kitabına göre sınıflandıran titiz bir "
           "değerlendiricisin. Yalnızca istenen JSON nesnesini yazarsın.")
