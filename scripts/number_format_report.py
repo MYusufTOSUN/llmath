@@ -7,12 +7,18 @@ versions of each problem (exact McNemar), and searches every program for the two
 misreadings: a Turkish decimal split at its comma (8,4 -> Rational(8, 4)) and a thousands
 separator read as a decimal point (12.450 -> 12.45).
 
+When the fabric follow-up has been run (data/number_format_kumas_v1.jsonl, runs numfmt-kumas-1
+and numfmt-kumas-1-norational), a section compares its cells: comma list against "ve" on the
+same numbers (McNemar), short against two-digit numbers (Fisher's exact test, different numbers)
+and Turkish against English.
+
 Çalıştırma: python scripts/number_format_report.py --model gemini-flash-lite --out outputs/numfmt-1-gemini.md
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 import re
 import sys
 from collections import defaultdict
@@ -34,12 +40,37 @@ CONDITIONS = [   # label, run, strategy
     ("PoT, Türkçe sayı notu", "numfmt-1-trnote", "pot"),
 ]
 GROUPS = ["D1-tr", "D1-en", "D2-tr", "D2-en"]
+FABRIC_CONDITIONS = [("PoT", "numfmt-kumas-1", "pot"),
+                     ("PoT, Rational ipucu yok", "numfmt-kumas-1-norational", "pot")]
+FABRIC_CELLS = [("K0", "tr", "main-1'in 5 kumaş sorusu, aynen"),
+                ("K1", "tr", "kısa sayılar (4,2), virgüllü sıralama"),
+                ("K2", "tr", "kısa sayılar, \"ve\" ile"),
+                ("K3", "tr", "iki basamaklı sayılar (14,2), virgüllü sıralama"),
+                ("K4", "tr", "iki basamaklı sayılar, \"ve\" ile"),
+                ("K1", "en", "K1'in İngilizcesi (kontrol)")]
 
 Row = tuple[Response, Verification, Question]
 
 
+def fisher_exact(a: int, b: int, c: int, d: int) -> float:
+    """Two-sided Fisher exact p-value for the 2×2 table [[a, b], [c, d]]."""
+    n1, n2, k = a + b, c + d, a + c
+    total = math.comb(n1 + n2, k)
+
+    def prob(x: int) -> float:
+        return math.comb(n1, x) * math.comb(n2, k - x) / total
+
+    observed = prob(a)
+    return min(1.0, sum(p for x in range(max(0, k - n2), min(k, n1) + 1)
+                        if (p := prob(x)) <= observed * (1 + 1e-9)))
+
+
 def misreadings(question: Question, code: str | None) -> list[str]:
-    """Number-format misreadings visible in a program, e.g. '8,4 → (8, 4)' or '12.450 → 12.45'."""
+    """Number-format misreadings visible in a program.
+
+    Three kinds: a number split at its comma ('8,4 → (8, 4)'), a Turkish decimal kept as text that
+    Python cannot read ("'7,5' metin"), and a thousands dot read as a decimal point ('12.450 → 12.45').
+    """
     if not code:
         return []
     code = re.sub(r"#.*", "", code)   # a comment may quote the question's number as it is written
@@ -49,6 +80,10 @@ def misreadings(question: Question, code: str | None) -> list[str]:
     for whole, part in re.findall(split, question.text):
         if re.search(rf"\(\s*{whole}\s*,\s*{part}\s*\)", code):
             found.append(f"{whole},{part} → ({whole}, {part})")
+        # only text handed to a number type as it is; '7,5'.replace(',', '.') is the right way
+        elif question.lang == "tr" and re.search(
+                rf"\b(?:Rational|Float|float|Fraction|Decimal|S|sympify|nsimplify)\(\s*['\"]{whole},{part}['\"]\s*\)", code):
+            found.append(f"'{whole},{part}' metin")
     if question.lang == "tr":
         for whole, part in re.findall(r"(?<![\d.,])(\d{1,3})\.(\d{3})(?![\d.])", question.text):
             if re.search(rf"(?<![\d.]){whole}\.{part.rstrip('0') or '0'}\d*(?!\d)", code):
@@ -145,9 +180,54 @@ def misreading_section(data: dict[str, dict[str, Row]]) -> list[str]:
     return lines
 
 
-def wrong_answers(data: dict[str, dict[str, Row]]) -> list[str]:
+def fabric_section(fabric: dict[str, dict[str, Row]]) -> list[str]:
+    """Which feature of the main set's fabric template brings out the decimal-comma misreading?"""
+    labels = [label for label, rows in fabric.items() if rows]
+    lines = ["## Kumaş kalıbı izleme seti (PoT)", "",
+             "| Hücre | Dil | İçerik | " + " | ".join(f"{label}: doğru, yanlış okuma" for label in labels) + " |",
+             "| --- | --- | --- |" + " --- |" * len(labels)]
+    for cell, lang, content in FABRIC_CELLS:
+        cells = []
+        for label in labels:
+            group = [r for r in fabric[label].values() if r[2].subset == cell and r[2].lang == lang]
+            misread = sum(bool(misreadings(r[2], r[0].code)) for r in group)
+            cells.append(f"{pct(sum(ok(r) for r in group), len(group))}, {misread}" if group else "—")
+        lines.append(f"| {cell} | {lang} | {content} | " + " | ".join(cells) + " |")
+
+    base = fabric.get("PoT") or {}
+    comparisons = []
+
+    def paired(name: str, first: dict[str, Row], second: dict[str, Row], counterpart) -> None:
+        ids = [q for q in first if counterpart(q) in second]
+        if ids:
+            a, b = [ok(first[q]) for q in ids], [ok(second[counterpart(q)]) for q in ids]
+            only_a, only_b, p = mcnemar_exact(a, b)
+            comparisons.append(f"| {name} | {len(ids)} | {pct(sum(a), len(a))} | {pct(sum(b), len(b))} | "
+                               f"{only_a} | {only_b} | McNemar {p_value(p)} |")
+
+    comma = {q: r for q, r in base.items() if q.endswith("-virgul-tr")}
+    for size, name in (("kisa", "K1 virgül ↔ K2 \"ve\", aynı sayılar"), ("uzun", "K3 virgül ↔ K4 \"ve\", aynı sayılar")):
+        paired(name, {q: r for q, r in comma.items() if f"-{size}-" in q}, base,
+               lambda q: q.replace("-virgul-tr", "-ve-tr"))
+    paired("K1 Türkçe ↔ İngilizce", {q: r for q, r in comma.items() if "-kisa-" in q}, base,
+           lambda q: q.replace("-virgul-tr", "-en"))
+    k1 = [ok(r) for r in base.values() if r[2].subset == "K1" and r[2].lang == "tr"]
+    k3 = [ok(r) for r in base.values() if r[2].subset == "K3"]
+    if k1 and k3:
+        p = fisher_exact(sum(k1), len(k1) - sum(k1), sum(k3), len(k3) - sum(k3))
+        comparisons.append(f"| K1 kısa ↔ K3 iki basamaklı, farklı sayılar | {len(k1)} + {len(k3)} | "
+                           f"{pct(sum(k1), len(k1))} | {pct(sum(k3), len(k3))} | — | — | Fisher {p_value(p)} |")
+    for label in labels[1:]:
+        paired(f"PoT ↔ {label}", {q: r for q, r in base.items() if q in fabric[label]}, fabric[label], lambda q: q)
+    if comparisons:
+        lines += ["", "| Karşılaştırma | Soru | A | B | Yalnız A doğru | Yalnız B doğru | p |",
+                  "| --- | --- | --- | --- | --- | --- | --- |"] + comparisons
+    return lines
+
+
+def wrong_answers(data: dict[str, dict[str, Row]], title: str = "Yanlış ve doğrulanamayan cevaplar") -> list[str]:
     wrong = [(label, r) for label, rows in data.items() for r in rows.values() if not ok(r)]
-    lines = [f"## Yanlış ve doğrulanamayan cevaplar ({len(wrong)})", ""]
+    lines = [f"## {title} ({len(wrong)})", ""]
     if not wrong:
         return lines + ["Yok."]
     lines += ["| Koşul | Soru | Beklenen | Model cevabı | Karar | Katman |", "| --- | --- | --- | --- | --- | --- |"]
@@ -165,12 +245,16 @@ def main() -> None:
     args = parser.parse_args()
     with SessionLocal() as session:
         data = {label: load(session, run, strategy, args.model) for label, run, strategy in CONDITIONS}
+        fabric = {label: load(session, run, strategy, args.model) for label, run, strategy in FABRIC_CONDITIONS}
     if not any(data.values()):
         sys.exit(f"{args.model} için sayı yazımı deneyi cevabı yok")
     parts = [f"# Sayı yazımı deneyi: {args.model}",
              "Veri: data/number_format_v1.jsonl (40 TR/EN çifti; D1 ondalık, D2 binlik ayırıcı)"]
-    for section in (accuracy_table(data), language_table(data), variant_table(data), misreading_section(data),
-                    wrong_answers(data)):
+    sections = [accuracy_table(data), language_table(data), variant_table(data), misreading_section(data),
+                wrong_answers(data)]
+    if any(fabric.values()):
+        sections += [fabric_section(fabric), wrong_answers(fabric, "Kumaş setinde yanlış ve doğrulanamayan cevaplar")]
+    for section in sections:
         parts.append("\n".join(section))
     text = "\n\n".join(parts) + "\n"
     if args.out:

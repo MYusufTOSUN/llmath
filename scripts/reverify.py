@@ -24,6 +24,7 @@ from sqlalchemy import select  # noqa: E402
 
 from llmath.db import Question, Response, Run, SessionLocal, Verification  # noqa: E402
 from llmath.sandbox import run_code  # noqa: E402
+from llmath.solver import program_answer  # noqa: E402
 from llmath.verify import verify  # noqa: E402
 
 TIMEOUT = "zaman aşımı"   # the sandbox's message for a program that ran out of time
@@ -31,8 +32,7 @@ TIMEOUT = "zaman aşımı"   # the sandbox's message for a program that ran out 
 
 def rerun(response: Response) -> None:
     result = run_code(response.code)
-    response.extraction_method = "program_output" if result.ok else ("blocked" if result.blocked else "program_error")
-    response.extracted_answer = result.answer if result.ok else None
+    response.extracted_answer, response.extraction_method = program_answer(result)
     response.exec_stdout, response.exec_error = result.stdout, result.stderr or None
 
 
