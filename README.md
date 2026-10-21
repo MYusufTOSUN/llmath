@@ -104,6 +104,17 @@ PoT istemi üç biçimde denenir:
 
 `trnote` yalnız Türkçe istemi değiştirdiği için yalnız Türkçe sorularda çalıştırılır. Her varyant ayrı bir çalıştırma adıyla kaydedilir, istem sürümü (`v0.1`, `v0.1-norational`, `v0.1-trnote`) de her cevabın yanında saklanır.
 
+**İlk sonuçlar (Gemini 3.5 Flash-Lite, 21 Ekim 2026).** Yeni sette 160 cevabın hepsi doğru (CoT 80/80, PoT 80/80); hiçbir programda sayı yazımı yanlış okunmadı. Türkçe not eklenince model sayıları açıkça dönüştürdü (`"15,8".replace(",", ".")`) ve 40 sorunun hepsini doğru çözdü. Rational ipucu kaldırılınca doğruluk 78/80'e indi: model kayan noktaya geçti ve bir soruda `int(43800 * 0.35)` 15330 yerine 15329 verdi.
+
+main-1'deki dört bölünme hatasının dördü de kumaş şablonundan çıktığı için bu kalıp ayrıca sınandı (`data/number_format_kumas_v1.jsonl`, 55 soru). Setin içeriği:
+- K0: main-1'in beş kumaş sorusu, aynen.
+- K1–K4: aynı kalıpta, kısa (4,2) ya da iki basamaklı (14,2) sayılar; sayılar virgülle ya da "ve" ile sıralanıyor.
+- K1'in İngilizcesi kontrol grubu olarak.
+
+45 Türkçe sorunun 3'ünde yanlış okuma görüldü. "7,5" → `Rational(7, 5)` yazıldı; yanlış cevap main-1'dekiyle aynı. "14,8" → `Rational(14, 8)` yazıldı. Bir programda da sayı dönüştürülmeden `Rational('7,5')` diye verildi. İngilizce kontrol grubu 10/10 doğru. Hücreler arasındaki farklar anlamlı değil.
+
+Görülen bütün bölünmeler `Rational(a, b)` biçiminde ve hepsi Rational ipucunun olduğu istemde çıktı. İpucusuz istemle yazılan 105 programın hiçbirinde bölünme yok, ama iki kayan nokta hatası var. Fark anlamlı değil (Fisher p = 0,26). Yani hata seyrek ve soruya bağlı; ipucu bölünmeyi kolaylaştırıyor olabilir, öte yandan kayan nokta hatalarını önlüyor. Qwen3 8B ile aynı koşular GPU boşaldığında yapılacak. Tablolar: `python scripts/number_format_report.py --model gemini-flash-lite`.
+
 ## Hata etiketleme (`llmath/taxonomy.py`)
 
 Her yanlış cevapta ilk hatalı adım bulunur. Ardından iki etiket verilir: hatanın doğduğu Newman aşaması (okuma, anlama, dönüştürme, işlem, kodlama) ve 13 hata türünden biri. H1–H9 Li vd. (2024)'ten alındı; H10–H13 bu projede eklendi, H10 Türkçeye özgüdür (Türkçe ifadeyi ya da sayı yazımını yanlış okuma). İki ölçüm etiketi model hatası sayılmaz: Y1 "cevap aslında doğru" doğrulayıcının yanlış negatiflerini, Y2 "soru ya da cevap anahtarı hatalı" veri hatalarını kaydeder. Her türün tanımı ve Türkçe örneği kod kitabındadır (`python -m llmath.taxonomy`).
@@ -120,6 +131,13 @@ Başlangıç noktası, modelin önceki bir çalıştırmadaki CoT ve PoT cevapla
 - **F2, tutarlılık geri bildirimi:** CoT ve PoT cevapları hâlâ uyuşmuyorsa ya da biri eksikse model iki çözümü birlikte görür ve soruyu yeniden çözer.
 
 İki cevap uyuşursa CoT cevabı kabul edilir, uyuşmazsa F2'nin cevabı. Her model çağrısı ayrı satır olarak saklanır (`pot_fix`, `consistency`), nihai karar da `refine` stratejisiyle. Böylece düzeltme; CoT, PoT ve kademeli çözümle aynı sorularda karşılaştırılabilir. Kademeli çözümden farkı, uyuşmazlığı güçlü bir modele göndermek yerine modelin kendisine çözdürmesidir. Hata mesajlarındaki yerel dosya yolları modele gönderilmeden önce silinir.
+
+**İlk sonuç (Gemini 3.5 Flash-Lite, main-1 cevapları).**
+- **F1:** Çalışmayan 27 programın hepsi düzeltme turundan sonra çalıştı, 18'i doğru cevap verdi. PoT doğruluğu %90,8'den %94,4'e çıktı.
+- **F2:** Etkisi sınırlı kaldı. CoT ile PoT'nin uyuşmadığı 28 soruda model 3 yanlış cevabı düzeltti, 5 doğru cevabı bozdu.
+- **Toplam:** Düzeltilmiş cevapların doğruluğu %97,4 (487/500). Tek başına CoT %97,8 (p = 0,727). Ek maliyet 59 çağrıdır.
+
+Gerçek bir hata mesajı (F1) işe yarıyor; modelin iki çözümünü karşılaştırıp karar vermesi (F2) CoT'tan iyi değil. Bu, dış bir geri bildirim olmadan öz-düzeltmenin akıl yürütmeyi güvenilir biçimde iyileştirmediği bulgusuyla (Huang vd., 2024) uyumlu. Qwen3 8B ile aynı deney GPU boşaldığında yapılacak.
 
 ## Klasör yapısı
 
