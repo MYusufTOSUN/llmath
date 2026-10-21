@@ -33,6 +33,7 @@ def test_judge_sees_numbered_steps_the_key_and_the_codebook():
     assert count == len(solution_steps(solution)) == 3
     assert "[2] 2 + 3 = 6" in prompt and "## Cevap anahtarı\n5" in prompt and "beklenen 5, bulunan 6" in prompt
     assert all(code in prompt for code in ERROR_TYPES) and "token sınırında" in prompt
+    assert judge.NUMBER_WRITING_RULE in prompt   # j0.5: the H10 rule is also an explicit instruction
 
     pot = Response(code="x = 2\nprint(x + 4)", exec_stdout="6\n", exec_error=None, extracted_answer="6")
     messages, count = judge.judge_messages(q, pot, v)

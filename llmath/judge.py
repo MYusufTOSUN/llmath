@@ -39,7 +39,13 @@ from .taxonomy import ERROR_TYPES, MEASUREMENT_CODES, NEWMAN_STAGES, is_truncate
 # j0.1 -> j0.2 (2026-10-21): H3 now sends misreadings of Turkish number writing to H10 (never used).
 # j0.2 -> j0.3 (2026-10-21): the author's codebook review (H5/H6/H8/H10/H11/H12/H13 wording, H10 under okuma).
 # j0.3 -> j0.4 (2026-10-21): step numbering keeps a displayed formula in one step. j0.2 and j0.3 produced no labels.
-JUDGE_VERSION = "j0.4"
+# j0.4 -> j0.5 (2026-10-21): an explicit number-writing rule in the instructions, because with the codebook
+# alone Qwen3 still filed "6,75 -> Rational(6, 75)" under H3.
+JUDGE_VERSION = "j0.5"
+NUMBER_WRITING_RULE = (
+    "Sorudaki \"6,75\" gibi virgüllü ya da \"12.450\" gibi noktalı Türkçe bir sayı çözümde ya da kodda yanlış "
+    "okunduysa (ör. Rational(6, 75) yazmak, sayıyı iki ayrı sayı saymak, binlik noktasını ondalık sanmak) tür H10, "
+    "aşama okumadır; H3 değildir. H3 yalnızca sayının yazımından bağımsız bir aktarma hatasıdır.")
 
 SYSTEM = ("Sen matematik çözümlerindeki hataları bir kod kitabına göre sınıflandıran titiz bir "
           "değerlendiricisin. Yalnızca istenen JSON nesnesini yazarsın.")
@@ -103,7 +109,8 @@ def judge_messages(question: Question, response: Response, verification: Verific
         f"- first_error_step: ilk hatanın bulunduğu {unit} numarası; belirlenemiyorsa 0.\n"
         "- explanation: hatayı bir iki cümleyle Türkçe açıkla.\n"
         "Modelin cevabı aslında doğruysa (aynı değerin başka bir yazımı gibi) Y1, soru ya da cevap anahtarı "
-        "hatalıysa Y2 seç.",
+        "hatalıysa Y2 seç.\n"
+        f"Türkçe sayı yazımı kuralı: {NUMBER_WRITING_RULE}",
     ])
     return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}], count
 
