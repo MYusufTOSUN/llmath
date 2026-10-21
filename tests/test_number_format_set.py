@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from sympy import Rational
 
-from llmath.number_format_set import TEMPLATES, en_number, generate
+from llmath.number_format_set import TEMPLATES, en_number, generate, generate_fabric
 from llmath.templates import tr_number
 from llmath.verify import verify
 
@@ -40,3 +40,18 @@ def test_pairs_share_numbers_and_answer_and_differ_in_format():
 
 def test_generation_is_deterministic():
     assert generate() == generate()
+    assert generate_fabric() == generate_fabric()
+
+
+def test_fabric_follow_up_changes_one_factor_at_a_time():
+    rows = {r["id"]: r for r in generate_fabric()}
+    assert len(rows) == 50 and {r["subset"] for r in rows.values()} == {"K1", "K2", "K3", "K4"}
+    for size, whole_digits in (("kisa", 1), ("uzun", 2)):
+        for i in range(1, 11):
+            comma, plain = rows[f"nf-kumas-{size}-{i}-virgul-tr"], rows[f"nf-kumas-{size}-{i}-ve-tr"]
+            assert plain["text"] == comma["text"].replace(" metre, Elif ", " metre ve Elif ")
+            assert comma["gold"] == plain["gold"] and (Rational(comma["gold"]) * 100).q == 1
+            numbers = re.findall(r"(\d+),\d+", comma["text"])
+            assert len(numbers) == 3 and all(len(n) == whole_digits for n in numbers)
+            if size == "kisa":
+                assert rows[f"nf-kumas-kisa-{i}-en"]["pair_id"] == comma["pair_id"]

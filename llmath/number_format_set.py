@@ -150,6 +150,58 @@ TEMPLATES: dict[str, FormatTemplate] = {t.name: t for t in [
 ]}
 
 
+#: Follow-up on the fabric template of the main set (P3 "ondalik_kumas"), where all of main-1's
+#: decimal-comma misreadings happened. Two factors on the same wording: short decimals such as
+#: 4,2 (K1, K2) or ones with a two-digit whole part such as 14,2 (K3, K4), and a comma list
+#: "Ayşe 4,2 metre, Elif 2,4 metre" (K1, K3) or the same with "ve" (K2, K4). K0 repeats main-1's
+#: five fabric questions word for word; English versions of K1 are the control.
+FABRIC_TR = {
+    "virgul": ("Metresi {p} TL olan bir kumaştan Ayşe {a} metre, Elif {b} metre alıyor. "
+               "İkisinin ödediği toplam tutar kaç TL'dir?"),
+    "ve": ("Metresi {p} TL olan bir kumaştan Ayşe {a} metre ve Elif {b} metre alıyor. "
+           "İkisinin ödediği toplam tutar kaç TL'dir?"),
+}
+FABRIC_EN = ("A fabric costs {p} lira per meter. Ayşe buys {a} meters of it, Elif {b} meters. "
+             "How much do the two pay in total, in lira?")
+FABRIC_SUBSETS = {("kisa", "virgul"): "K1", ("kisa", "ve"): "K2", ("uzun", "virgul"): "K3", ("uzun", "ve"): "K4"}
+
+
+def _fabric_draw(rng: random.Random, long: bool) -> tuple[Rational, Rational, Rational]:
+    """Price and two lengths as in the fabric template; the bill has at most two decimals."""
+    whole, length = ((12, 39), (11, 19)) if long else ((2, 9), (1, 4))
+    while True:
+        price = (_decimal(rng, *whole) if rng.random() < 0.5
+                 else Rational(100 * rng.randint(*whole) + rng.choice([25, 75]), 100))
+        a, b = _decimal(rng, *length), _decimal(rng, *length)
+        if a != b and (price * (a + b) * 100).q == 1:
+            return price, a, b
+
+
+def generate_fabric(per_cell: int = 10, seed: int = 2026_10_21) -> list[dict]:
+    """K1–K4 rows of the fabric follow-up (K0 is copied from the main set by the build script)."""
+    rows = []
+    for size in ("kisa", "uzun"):
+        rng = random.Random(seed + zlib.crc32(f"kumas-{size}".encode()))
+        draws: list[tuple[Rational, Rational, Rational]] = []
+        while len(draws) < per_cell:
+            draw = _fabric_draw(rng, size == "uzun")
+            if draw not in draws:
+                draws.append(draw)
+        for i, (p, a, b) in enumerate(draws, start=1):
+            answer = p * (a + b)
+            base = {"gold": gold_string(answer), "answer_type": "integer" if answer.q == 1 else "fraction",
+                    "topic": "ondalık sayılar (kumaş kalıbı)", "source": SOURCE, "license": LICENSE}
+            pair = f"nf-kumas-{size}-{i}"
+            for form, template in FABRIC_TR.items():
+                rows.append({**base, "id": f"{pair}-{form}-tr", "subset": FABRIC_SUBSETS[(size, form)],
+                             "pair_id": pair if form == "virgul" else f"{pair}-ve", "lang": "tr",
+                             "text": template.format(p=tr_number(p), a=tr_number(a), b=tr_number(b))})
+            if size == "kisa":
+                rows.append({**base, "id": f"{pair}-en", "subset": "K1", "pair_id": pair, "lang": "en",
+                             "text": FABRIC_EN.format(p=en_number(p), a=en_number(a), b=en_number(b))})
+    return rows
+
+
 def generate(per_template: int = 5, seed: int = 2026_10_21) -> list[dict]:
     """Paired dataset rows (Turkish first, then English); the same seed always gives the same set."""
     rows = []
