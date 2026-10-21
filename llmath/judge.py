@@ -134,9 +134,15 @@ def parse_label(text: str, step_count: int) -> dict | None:
 
 
 def same_family(judge: ModelSpec, model_key: str) -> bool:
-    """True when the judge may not label this model (same family, or a model it cannot check)."""
+    """True when the judge may not label this model: same family or base model, or a model it cannot check.
+
+    A distillation counts as both families, e.g. DeepSeek-R1 8B on Qwen3-8B is DeepSeek and Alibaba.
+    """
     spec = MODELS.get(model_key)
-    return spec is None or spec.family == judge.family
+    if spec is None:
+        return True
+    judges, answers = {judge.family, judge.base} - {None}, {spec.family, spec.base} - {None}
+    return bool(judges & answers)
 
 
 def to_judge(session: Session, run_id: int, annotator: str,

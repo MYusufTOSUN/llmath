@@ -29,6 +29,7 @@ class ModelSpec:
     think: bool | None = None   # Ollama reasoning switch; None = model default
     env_key: str | None = None  # environment variable holding the API key
     max_tokens: int = 4096
+    base: str | None = None     # family of the base model when another developer fine-tuned it (distillations)
 
 
 MODELS: dict[str, ModelSpec] = {
@@ -38,8 +39,9 @@ MODELS: dict[str, ModelSpec] = {
         ModelSpec("qwen3-8b-think", "ollama", "qwen3:8b", "Qwen3 8B, düşünme açık (yerel)", "Alibaba",
                   think=True, max_tokens=8192),
         ModelSpec("llama3.1-8b", "ollama", "llama3.1:8b", "Llama 3.1 8B (yerel)", "Meta"),
+        # Ollama's deepseek-r1:8b is DeepSeek-R1 distilled onto Qwen3-8B (ollama show: architecture qwen3)
         ModelSpec("deepseek-r1-8b", "ollama", "deepseek-r1:8b", "DeepSeek-R1 8B (yerel)", "DeepSeek",
-                  think=True, max_tokens=8192),
+                  think=True, max_tokens=8192, base="Alibaba"),
         ModelSpec("phi4-mini-reasoning", "ollama", "phi4-mini-reasoning", "Phi-4-mini-reasoning 3.8B (yerel)",
                   "Microsoft", max_tokens=8192),
         ModelSpec("gemini-flash-lite", "litellm", "gemini/gemini-3.5-flash-lite",

@@ -50,6 +50,11 @@ def test_a_judge_may_not_label_its_own_family():
     assert judge.same_family(gemini, "gemini-flash-lite")
     assert not judge.same_family(gemini, "qwen3-8b")
     assert judge.same_family(gemini, "silinmis-model")   # unknown models are refused too
+    # DeepSeek-R1 8B is distilled onto Qwen3-8B, so Qwen may not judge it, and it may not judge Qwen
+    assert judge.same_family(MODELS["qwen3-8b-think"], "deepseek-r1-8b")
+    assert judge.same_family(MODELS["deepseek-r1-8b"], "qwen3-8b")
+    assert not judge.same_family(gemini, "deepseek-r1-8b")
+    assert not judge.same_family(MODELS["qwen3-8b-think"], "gemini-flash-lite")
 
 
 def test_cohen_kappa():
