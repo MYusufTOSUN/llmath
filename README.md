@@ -31,10 +31,12 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | Testler | `python -m pytest` |
 | Hata etiketleme kod kitabı | `python -m llmath.taxonomy` |
 | Bir çalıştırmayı güncel sandbox ve doğrulayıcıyla yeniden değerlendir | `python scripts/reverify.py --name main-1` (model yeniden çağrılmaz; değişenler `outputs/reverify-main-1-<zaman>.csv`) |
+| Sayı yazımı deneyi | `python -m llmath.runner --name numfmt-1 --data data/number_format_v1.jsonl --models gemini-flash-lite`; PoT istem varyantları ayrı bir `--name` ile: `--strategies pot --prompt-variant norational` ya da `--strategies pot --langs tr --prompt-variant trnote` |
 | Pilot veri setini yeniden üret | `python scripts/build_pilot_set.py` |
 | Ana veri setini yeniden üret | `python scripts/build_main_set.py` (inceleme listesi: `outputs/main_v1_review.md`) |
+| Sayı yazımı setini yeniden üret | `python scripts/build_number_format_set.py` |
 
-Kullanılabilir model anahtarları `llmath/config.py` içindeki `MODELS` sözlüğündedir: `qwen3-8b`, `qwen3-8b-think`, `llama3.1-8b`, `gemini-flash-lite`, `gemini-flash`. Ollama modelleri indirilmişse, bulut modelleri ise `.env` içinde anahtarı varsa kullanılabilir.
+Kullanılabilir model anahtarları `llmath/config.py` içindeki `MODELS` sözlüğündedir: `qwen3-8b`, `qwen3-8b-think`, `llama3.1-8b`, `deepseek-r1-8b`, `phi4-mini-reasoning`, `gemini-flash-lite`, `gemini-flash`. Ollama modelleri indirilmişse, bulut modelleri ise `.env` içinde anahtarı varsa kullanılabilir.
 
 ## Pilot veri seti (`data/pilot.jsonl`, 40 öğe)
 
@@ -85,6 +87,20 @@ Ana setin 500 sorusu Qwen3 8B (yerel) ve Gemini 3.5 Flash-Lite (ücretsiz API) i
 - **Ondalık virgül:** İki model de PoT'ta Türkçe ondalık virgülü yanlış okuyor ("8,4" → `Rational(8, 4)`). Bu, pilotta görülen hatanın aynısı.
 
 Ayrıntılı tablolar `python scripts/report.py --name main-1 --cascade qwen3-8b gemini-flash-lite --out outputs/main-1.md` ile üretilir.
+
+## Sayı yazımı deneyi (`data/number_format_v1.jsonl`, 80 öğe)
+
+main-1'de iki model de PoT'ta Türkçe ondalık virgülü yanlış okudu. Bu deney hatanın ne kadar yaygın olduğunu ve istemle ilgisini ölçer. Set 40 Türkçe–İngilizce soru çiftinden oluşur (8 şablon × 5). Bir çiftin iki sorusunda sayılar ve cevap aynıdır, yalnız dil ve sayı yazımı değişir. D1'deki 30 çiftte ondalık sayılar (Türkçe 8,4; İngilizce 8.4), D2'deki 10 çiftte binlik ayırıcılı büyük sayılar (Türkçe 12.450; İngilizce 12,450) vardır. Cevaplar SymPy ile hesaplanır ve en fazla iki ondalık basamaklıdır; böylece kuruşa yuvarlayan bir model yanlış sayılmaz.
+
+PoT istemi üç biçimde denenir:
+
+| Varyant | İstemdeki fark | Sınanan soru |
+| --- | --- | --- |
+| `base` | Yok (main-1'deki v0.1 istemi) | Hata bu sette de çıkıyor mu? |
+| `norational` | "Kesirli sonuçlarda sympy.Rational kullan" cümlesi yok | Hatayı bu ipucu mu tetikliyor? |
+| `trnote` | Türkçe sorulara "ondalık ayırıcı virgül, binlik ayırıcı noktadır" notu eklenir | Açık bir uyarı hatayı önlüyor mu? |
+
+`trnote` yalnız Türkçe istemi değiştirdiği için yalnız Türkçe sorularda çalıştırılır. Her varyant ayrı bir çalıştırma adıyla kaydedilir, istem sürümü (`v0.1`, `v0.1-norational`, `v0.1-trnote`) de her cevabın yanında saklanır.
 
 ## Hata etiketleme (`llmath/taxonomy.py`)
 

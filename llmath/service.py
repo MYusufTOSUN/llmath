@@ -49,8 +49,9 @@ def get_or_create_run(session: Session, name: str, config: dict | None = None) -
 
 
 def solve_and_verify(question_text: str, gold: str | None, spec: ModelSpec, strategy: str,
-                     lang: str = "tr", answer_type: str | None = None) -> tuple[SolveResult, Verdict | None]:
-    result = solve(question_text, spec, strategy, lang)
+                     lang: str = "tr", answer_type: str | None = None,
+                     variant: str = "base") -> tuple[SolveResult, Verdict | None]:
+    result = solve(question_text, spec, strategy, lang, variant)
     if result.error:
         return result, Verdict("unparsed", "llm_error", result.error)
     if gold is None:
@@ -63,7 +64,7 @@ def record(session: Session, run: Run, question_text: str, question_id: str | No
     response = result.response
     row = Response(
         run_id=run.id, question_id=question_id, question_text=question_text,
-        model_key=spec.key, strategy=result.strategy, prompt_version=PROMPT_VERSION,
+        model_key=spec.key, strategy=result.strategy, prompt_version=result.prompt_version,
         raw_output=response.text if response else None,
         reasoning=response.reasoning if response else None,
         extracted_answer=result.answer, extraction_method=result.extraction_method,

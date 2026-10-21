@@ -31,7 +31,7 @@ def question_file(tmp_path):
 def test_runner_solves_only_the_questions_in_the_given_file(question_file, monkeypatch):
     texts = []
 
-    def fake_solve(text, gold, spec, strategy, lang, answer_type):
+    def fake_solve(text, gold, spec, strategy, lang, answer_type, variant):
         texts.append(text)
         return SolveResult(strategy, gold, "boxed"), Verdict("correct", "exact")
 
@@ -45,7 +45,7 @@ def test_runner_solves_only_the_questions_in_the_given_file(question_file, monke
 def test_runner_stops_a_model_after_repeated_api_errors(question_file, monkeypatch):
     strategies = []
 
-    def failing_solve(text, gold, spec, strategy, lang, answer_type):
+    def failing_solve(text, gold, spec, strategy, lang, answer_type, variant):
         strategies.append(strategy)
         return (SolveResult(strategy, None, "none", error="429 RESOURCE_EXHAUSTED"),
                 Verdict("unparsed", "llm_error"))

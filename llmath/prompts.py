@@ -1,8 +1,20 @@
-"""Prompt templates. Any wording change must bump PROMPT_VERSION."""
+"""Prompt templates. Any wording change must bump PROMPT_VERSION.
+
+PoT also has two experimental variants for the Turkish number-format study; the base variant is the
+v0.1 prompt word for word. A variant's answers are stored with the version "v0.1-<variant>".
+"""
 
 from __future__ import annotations
 
 PROMPT_VERSION = "v0.1"
+VARIANTS = ("base", "norational", "trnote")
+POT_RATIONAL = {
+    "tr": " Kesirli sonuçlarda sympy.Rational kullan, ondalığa çevirme.",
+    "en": " Use sympy.Rational for fractional results instead of converting to decimals.",
+}
+# Added to Turkish questions only, to see whether naming the convention prevents "8,4" -> Rational(8, 4).
+TR_NUMBER_NOTE = ("Sorudaki sayılar Türkçe yazımla verilmiştir: ondalık ayırıcı virgül (2,5 = 2.5), "
+                  "binlik ayırıcı noktadır (1.250 = 1250). ")
 
 SYSTEM = {
     "cot": {
@@ -32,18 +44,16 @@ USER = {
     },
     "pot": {
         "tr": (
-            "{question}\n\n"
+            "{question}\n\n{note}"
             "Bu soruyu çözen kısa bir Python programı yaz. Yalnızca math, fractions ve sympy "
             "kullanabilirsin. Kodu tek bir ```python bloğu içinde ver. Program nihai cevabı en sonda "
-            "tek satır olarak print() ile yazdırsın. Kesirli sonuçlarda sympy.Rational kullan, "
-            "ondalığa çevirme. Kod dışında açıklama yazma."
+            "tek satır olarak print() ile yazdırsın.{rational} Kod dışında açıklama yazma."
         ),
         "en": (
-            "{question}\n\n"
+            "{question}\n\n{note}"
             "Write a short Python program that solves this problem. You may only use math, fractions "
             "and sympy. Put the code in a single ```python block. The program must print the final "
-            "answer as a single line at the end. Use sympy.Rational for fractional results instead of "
-            "converting to decimals. Do not write any explanation outside the code."
+            "answer as a single line at the end.{rational} Do not write any explanation outside the code."
         ),
     },
 }
@@ -51,9 +61,17 @@ USER = {
 STRATEGIES = {"cot": "Adım adım çözüm (CoT)", "pot": "SymPy koduyla çözüm (PoT)"}
 
 
-def build_messages(question: str, strategy: str, lang: str = "tr") -> list[dict[str, str]]:
+def prompt_version_for(variant: str = "base") -> str:
+    return PROMPT_VERSION if variant == "base" else f"{PROMPT_VERSION}-{variant}"
+
+
+def build_messages(question: str, strategy: str, lang: str = "tr", variant: str = "base") -> list[dict[str, str]]:
+    if variant not in VARIANTS:
+        raise ValueError(f"bilinmeyen istem varyantı: {variant}")
     lang = lang if lang in ("tr", "en") else "tr"
-    return [
-        {"role": "system", "content": SYSTEM[strategy][lang]},
-        {"role": "user", "content": USER[strategy][lang].format(question=question.strip())},
-    ]
+    user = USER[strategy][lang].format(
+        question=question.strip(),
+        note=TR_NUMBER_NOTE if variant == "trnote" and lang == "tr" else "",
+        rational="" if variant == "norational" else POT_RATIONAL[lang],
+    )
+    return [{"role": "system", "content": SYSTEM[strategy][lang]}, {"role": "user", "content": user}]
