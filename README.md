@@ -146,8 +146,9 @@ DeepSeek-R1 8B, Phi-4-mini-reasoning ve Qwen3 8B'nin düşünme açık hâli ana
 
 Bu yüzden düşünen modeller kendi önerilen ayarlarıyla çalışır:
 - sıcaklık 0,6, top_p 0,95, Qwen3 için ayrıca top_k 20;
-- 16.384 token bağlam;
 - tekrarlanabilirlik için sabit tohum (`llmath/config.py`, `REASONING`).
+
+Bağlam önce 16.384 tokene çıkarıldı. Ama 8 GB'lık RTX 5060'ta bu boyutta 8B'lik bir modelin %20'si işlemciye taşındı ve hız saniyede 65 tokenden 24 tokene düştü. 9.216'da bile model karta tam sığmadı. Bu yüzden bağlam 8.192'de kaldı. Çıktı en fazla 7.680 tokendir; böylece uzun bir cevap bağlamı aşıp soruyu dışarı itmek yerine temiz biçimde kesilir.
 
 Öteki modeller main-1'deki gibi sıcaklık 0 ile çalışır. LLM-hakem de her zaman sıcaklık 0 ile çalışır. Her çalıştırmada kullanılan ayarlar çalıştırma kaydına (`config.sampling`) yazılır.
 

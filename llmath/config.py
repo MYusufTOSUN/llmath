@@ -40,8 +40,11 @@ class ModelSpec:
 
 
 # Recommended for reasoning models by DeepSeek and Qwen (Ollama defaults for deepseek-r1:8b and qwen3:8b);
-# Phi-4-mini-reasoning has none in Ollama and gets the same. The window leaves room for long reasoning.
-REASONING = {"temperature": 0.6, "top_p": 0.95, "seed": 2026_10_21, "num_ctx": 16384, "max_tokens": 12288}
+# Phi-4-mini-reasoning has none in Ollama and gets the same. On the 8 GB RTX 5060 only an 8192-token window
+# keeps an 8B model fully on the GPU (16384 put 20% on the CPU and cut the speed from 65 to 24 tokens/s,
+# 2026-10-22). Output stops at 7680 tokens, so a long answer is cut cleanly instead of pushing the question
+# out of the window.
+REASONING = {"temperature": 0.6, "top_p": 0.95, "seed": 2026_10_21, "num_ctx": 8192, "max_tokens": 7680}
 
 
 MODELS: dict[str, ModelSpec] = {

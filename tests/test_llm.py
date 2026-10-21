@@ -25,8 +25,10 @@ def test_greedy_models_keep_the_main_run_settings(monkeypatch):
 def test_reasoning_models_sample_as_their_publishers_recommend(monkeypatch):
     payload = _sent(monkeypatch, "deepseek-r1-8b")
     assert payload["think"] is True
-    assert payload["options"] == {"temperature": 0.6, "num_ctx": 16384, "num_predict": 12288, "top_p": 0.95,
+    assert payload["options"] == {"temperature": 0.6, "num_ctx": 8192, "num_predict": 7680, "top_p": 0.95,
                                   "seed": 2026_10_21}
+    # the output can never push the question out of the window
+    assert payload["options"]["num_predict"] < payload["options"]["num_ctx"]
     assert _sent(monkeypatch, "qwen3-8b-think")["options"]["top_k"] == 20
     # an explicit temperature wins, as the LLM judge uses it to keep its labels deterministic
     assert _sent(monkeypatch, "qwen3-8b-think", temperature=0.0)["options"]["temperature"] == 0.0
