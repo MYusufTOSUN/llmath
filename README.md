@@ -169,7 +169,15 @@ Başlangıç noktası, modelin önceki bir çalıştırmadaki CoT ve PoT cevapla
 - **F2:** Etkisi sınırlı kaldı. CoT ile PoT'nin uyuşmadığı 28 soruda model 3 yanlış cevabı düzeltti, 5 doğru cevabı bozdu.
 - **Toplam:** Düzeltilmiş cevapların doğruluğu %97,4 (487/500). Tek başına CoT %97,8 (p = 0,727). Ek maliyet 59 çağrıdır.
 
-Gerçek bir hata mesajı (F1) işe yarıyor; modelin iki çözümünü karşılaştırıp karar vermesi (F2) CoT'tan iyi değil. Bu, dış bir geri bildirim olmadan öz-düzeltmenin akıl yürütmeyi güvenilir biçimde iyileştirmediği bulgusuyla (Huang vd., 2024) uyumlu. Qwen3 8B ile aynı deney GPU boşaldığında yapılacak.
+Gerçek bir hata mesajı (F1) işe yarıyor; Gemini'de modelin iki çözümünü karşılaştırıp karar vermesi (F2) CoT'tan iyi değil. Bu, dış bir geri bildirim olmadan öz-düzeltmenin akıl yürütmeyi güvenilir biçimde iyileştirmediği bulgusuyla (Huang vd., 2024) uyumlu.
+
+**Qwen3 8B (yerel, main-1 cevapları).** Sonuç Gemini'nin tersi:
+- **F1:** Çalışmayan 45 programın 30'u çalıştı, 16'sı doğru cevap verdi. PoT %78,8'den %82,0'ye çıktı.
+- **F2:** Uyuşmayan 110 soruda model 15 yanlışı düzeltti, hiçbir doğruyu bozmadı.
+- **Toplam:** Düzeltilmiş cevaplar %92,4 (462/500). Tek başına CoT %89,4 (McNemar 15'e 0, p < 0,001). Ek maliyet 176 yerel çağrıdır.
+- **Kademeli çözümle karşılaştırma:** Uyuşmazlığı güçlü modele gönderen kademeli çözüm aynı sorularda hâlâ açıkça daha iyi: %97,4, 126 Gemini çağrısıyla (29'a 4, p < 0,001).
+
+Yani zayıf model için öz-düzeltme ücretsiz ve anlamlı bir kazanç sağlıyor, güçlü modelde ise kazanç yok.
 
 ## Klasör yapısı
 
