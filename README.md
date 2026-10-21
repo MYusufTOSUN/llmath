@@ -104,7 +104,7 @@ PoT istemi üç biçimde denenir:
 
 `trnote` yalnız Türkçe istemi değiştirdiği için yalnız Türkçe sorularda çalıştırılır. Her varyant ayrı bir çalıştırma adıyla kaydedilir, istem sürümü (`v0.1`, `v0.1-norational`, `v0.1-trnote`) de her cevabın yanında saklanır.
 
-**İlk sonuçlar (Gemini 3.5 Flash-Lite, 21 Ekim 2026).** Yeni sette 160 cevabın hepsi doğru (CoT 80/80, PoT 80/80); hiçbir programda sayı yazımı yanlış okunmadı. Türkçe not eklenince model sayıları açıkça dönüştürdü (`"15,8".replace(",", ".")`) ve 40 sorunun hepsini doğru çözdü. Rational ipucu kaldırılınca doğruluk 78/80'e indi: model kayan noktaya geçti ve bir soruda `int(43800 * 0.35)` 15330 yerine 15329 verdi.
+**Gemini 3.5 Flash-Lite (21 Ekim 2026).** Yeni sette 160 cevabın hepsi doğru (CoT 80/80, PoT 80/80); hiçbir programda sayı yazımı yanlış okunmadı. Türkçe not eklenince model sayıları açıkça dönüştürdü (`"15,8".replace(",", ".")`) ve 40 sorunun hepsini doğru çözdü. Rational ipucu kaldırılınca doğruluk 78/80'e indi: model kayan noktaya geçti ve bir soruda `int(43800 * 0.35)` 15330 yerine 15329 verdi.
 
 main-1'deki dört bölünme hatasının dördü de kumaş şablonundan çıktığı için bu kalıp ayrıca sınandı (`data/number_format_kumas_v1.jsonl`, 55 soru). Setin içeriği:
 - K0: main-1'in beş kumaş sorusu, aynen.
@@ -113,7 +113,30 @@ main-1'deki dört bölünme hatasının dördü de kumaş şablonundan çıktı�
 
 45 Türkçe sorunun 3'ünde yanlış okuma görüldü. "7,5" → `Rational(7, 5)` yazıldı; yanlış cevap main-1'dekiyle aynı. "14,8" → `Rational(14, 8)` yazıldı. Bir programda da sayı dönüştürülmeden `Rational('7,5')` diye verildi. İngilizce kontrol grubu 10/10 doğru. Hücreler arasındaki farklar anlamlı değil.
 
-Görülen bütün bölünmeler `Rational(a, b)` biçiminde ve hepsi Rational ipucunun olduğu istemde çıktı. İpucusuz istemle yazılan 105 programın hiçbirinde bölünme yok, ama iki kayan nokta hatası var. Fark anlamlı değil (Fisher p = 0,26). Yani hata seyrek ve soruya bağlı; ipucu bölünmeyi kolaylaştırıyor olabilir, öte yandan kayan nokta hatalarını önlüyor. Qwen3 8B ile aynı koşular GPU boşaldığında yapılacak. Tablolar: `python scripts/number_format_report.py --model gemini-flash-lite`.
+Gemini'de görülen bölünmelerin hepsi Rational ipucunun olduğu istemde çıktı; ipucusuz istemle yazılan 105 programda bölünme yok ama iki kayan nokta hatası var (Fisher p = 0,26). Qwen3 8B'nin sonuçları bu farkın ipucundan kaynaklanmadığını gösterdi.
+
+**Qwen3 8B (yerel, 21 Ekim 2026).**
+
+| Koşul | Türkçe | İngilizce | Türkçe programlarda bölünme |
+| --- | --- | --- | --- |
+| CoT | 38/40 | 39/40 | — |
+| PoT | 25/40 | 33/40 | 5/40 |
+| PoT, Rational ipucu yok | 22/40 | 39/40 | 12/40 |
+| PoT, Türkçe sayı notu | 15/40 | — | 19/40 |
+
+- **CoT:** Sayı yazımından etkilenmiyor.
+- **PoT:** Türkçe soruların 40'ından 25'i, İngilizce karşılıklarının 33'ü doğru (McNemar p = 0,039). İngilizce programların hiçbirinde bölünme yok.
+- **Rational ipucu kaldırılınca:** İngilizce 39/40'a çıkıyor, Türkçe 22/40'a iniyor (Türkçe–İngilizce p < 0,001).
+- **Türkçe not eklenince:** Durum düzelmiyor, kötüleşiyor (25/40'tan 15/40'a, p = 0,013). Not modeli virgüle odaklıyor ve model `benzin = Rational(8, 3)  # 8,3 litre = 83/10 litre` gibi programlar yazıyor: değeri yorum satırında doğru biliyor ama kodda virgülü argüman ayıracı olarak kopyalıyor.
+
+Kumaş setinde Qwen'in 45 Türkçe programının 20'sinde bölünme var; bu oran yeni setteki 5/40'tan anlamlı biçimde yüksek (Fisher p = 0,002). İngilizce kontrol grubunda bölünme yok. Virgül ile "ve" arasında ve sayı uzunluğunda fark yok. Rational ipucu kaldırılınca Türkçe doğruluk 15/25'ten 4/25'e düşüyor (McNemar p < 0,001), yani Qwen'de ipucu bölünmeyi artırmıyor, azaltıyor.
+
+Özetle:
+- **Hata türü:** Türkçe ondalık virgülün PoT'de yanlış okunması (H10) küçük modelde sık ve gerçek bir hata. Temel istemle, kalıba göre Türkçe programların %12'sinde ile %44'ünde görülüyor.
+- **Model farkı:** Güçlü modelde seyrek. Temel istemle Türkçe programlarda Gemini 3/85, Qwen 25/85 (Fisher p < 0,001).
+- **İstemin etkisi:** Açık bir Türkçe sayı notu küçük modelde işe yaramıyor, ters tepiyor.
+
+Tablolar: `python scripts/number_format_report.py --model qwen3-8b` (Gemini için `--model gemini-flash-lite`).
 
 ## Hata etiketleme (`llmath/taxonomy.py`)
 
