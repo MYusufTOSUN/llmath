@@ -27,6 +27,7 @@ BANNED_NAMES = {"open", "exec", "eval", "compile", "__import__", "input", "globa
 BANNED_ATTRIBUTES = BANNED_NAMES - {"open"}
 # These evaluate strings as code when given one (e.g. sympify("__import__('os')...")).
 STRING_EVALUATORS = {"sympify", "S", "parse_expr", "parse_latex"}
+TIMEOUT_MESSAGE = "zaman aşımı"   # stored as exec_error when a program runs out of time
 
 
 @dataclass
@@ -88,7 +89,7 @@ def run_code(code: str, timeout: float = 15.0) -> ExecResult:
                 encoding="utf-8", errors="replace", timeout=timeout,
             )
         except subprocess.TimeoutExpired as exc:
-            return ExecResult(ok=False, stdout=_text(exc.stdout), stderr="zaman aşımı",
+            return ExecResult(ok=False, stdout=_text(exc.stdout), stderr=TIMEOUT_MESSAGE,
                               timed_out=True)
     return ExecResult(ok=proc.returncode == 0, stdout=proc.stdout, stderr=tidy_traceback(proc.stderr)[-2000:])
 

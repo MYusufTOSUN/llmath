@@ -31,13 +31,14 @@ from sqlalchemy.orm import Session
 from .config import MODELS, ModelSpec
 from .db import Annotation, Question, Response, Run, SessionLocal, Verification
 from .llm import LLMError, LLMResponse, chat
-from .sandbox import tidy_traceback
+from .sandbox import TIMEOUT_MESSAGE, tidy_traceback
 from .service import model_status, save_annotation
-from .taxonomy import ERROR_TYPES, MEASUREMENT_CODES, NEWMAN_STAGES, solution_steps
+from .taxonomy import ERROR_TYPES, MEASUREMENT_CODES, NEWMAN_STAGES, is_truncated, solution_steps
 
 # Bump on any change to the judge prompt or the codebook; it is part of the annotator name.
-# j0.1 -> j0.2 (2026-10-21): H3 now sends misreadings of Turkish number writing to H10.
-JUDGE_VERSION = "j0.2"
+# j0.1 -> j0.2 (2026-10-21): H3 now sends misreadings of Turkish number writing to H10 (never used).
+# j0.2 -> j0.3 (2026-10-21): the author's codebook review (H5/H6/H8/H10/H11/H12/H13 wording, H10 under okuma).
+JUDGE_VERSION = "j0.3"
 
 SYSTEM = ("Sen matematik çözümlerindeki hataları bir kod kitabına göre sınıflandıran titiz bir "
           "değerlendiricisin. Yalnızca istenen JSON nesnesini yazarsın.")
@@ -84,6 +85,8 @@ def judge_messages(question: Question, response: Response, verification: Verific
              + (f" ({verification.detail})" if verification.detail else "")]
     if response.finish_reason == "length":
         facts.append("Çıktı token sınırında kesildi.")
+    if response.exec_error == TIMEOUT_MESSAGE:
+        facts.append("Program 15 saniye içinde bitmedi (zaman aşımı).")
     user = "\n\n".join([
         "Bir dil modelinin matematik sorusuna verdiği cevap doğrulamadan geçmedi. Görevin, çözümdeki ilk hatayı "
         "bulmak ve aşağıdaki kod kitabına göre etiketlemek.",
@@ -204,17 +207,24 @@ def agreement_text(a: dict) -> str:
 
 
 def label_table(session: Session, run_id: int, annotator: str) -> str:
-    """How often the annotator chose each error type, per model and strategy."""
-    rows = session.execute(select(Annotation.error_type, Response.model_key, Response.strategy)
+    """How often the annotator chose each error type, per model and strategy.
+
+    The last row counts cut-off outputs, which are H13 in addition to their labelled first error.
+    """
+    rows = session.execute(select(Annotation.error_type, Response.model_key, Response.strategy,
+                                  Response.finish_reason, Response.exec_error)
                            .join(Response, Response.id == Annotation.response_id)
                            .where(Response.run_id == run_id, Annotation.annotator == annotator)).all()
-    columns = sorted({(model, strategy) for _, model, strategy in rows})
-    counts = Counter((code, model, strategy) for code, model, strategy in rows)
+    columns = sorted({(model, strategy) for _, model, strategy, _, _ in rows})
+    counts = Counter((code, model, strategy) for code, model, strategy, _, _ in rows)
+    cut = Counter((model, strategy) for _, model, strategy, finish, error in rows if is_truncated(finish, error))
     lines = ["| Tür | " + " | ".join(f"{m} {s}" for m, s in columns) + " |",
              "| --- |" + " --- |" * len(columns)]
     for code, t in ERROR_TYPES.items():
         if any(counts[(code, m, s)] for m, s in columns):
             lines.append(f"| {code} {t.name} | " + " | ".join(str(counts[(code, m, s)]) for m, s in columns) + " |")
+    lines.append("| Yarıda kalan çıktı (H13, ilk hatadan ayrıca) | "
+                 + " | ".join(str(cut[(m, s)]) for m, s in columns) + " |")
     return "\n".join(lines)
 
 

@@ -5,7 +5,8 @@ from llmath import judge
 from llmath.config import MODELS
 from llmath.db import Annotation, Question, Response, Run, SessionLocal, Verification, init_db
 from llmath.llm import LLMResponse
-from llmath.taxonomy import ERROR_TYPES, solution_steps
+from llmath.sandbox import TIMEOUT_MESSAGE
+from llmath.taxonomy import ERROR_TYPES, is_truncated, solution_steps
 
 
 def test_parse_label_checks_the_codebook():
@@ -43,6 +44,17 @@ def test_codebook_sends_turkish_number_misreadings_to_h10():
     assert "H10" in ERROR_TYPES["H3"].definition and "," not in ERROR_TYPES["H3"].example.split(";")[0]
     assert "ondalık virgül" in ERROR_TYPES["H10"].definition
     assert judge.annotator_name("gemini-flash-lite") == f"llm:gemini-flash-lite/{judge.JUDGE_VERSION}"
+
+
+def test_codebook_follows_the_authors_review():
+    assert ERROR_TYPES["H10"].stage == "okuma"                                    # 1.1
+    assert "H6 ya da H7" in ERROR_TYPES["H11"].definition                         # 1.2 a wrong plan is not H11
+    assert "H12" in ERROR_TYPES["H5"].definition and "liraya" not in ERROR_TYPES["H5"].example   # 1.3
+    assert "veriyi hiç kullanmamak" in ERROR_TYPES["H8"].definition               # 1.4
+    assert "ayrıca H13" in ERROR_TYPES["H13"].definition                          # 1.5
+    assert "yanlış anlama" in ERROR_TYPES["H6"].definition                        # 1.6
+    assert is_truncated("length", None) and is_truncated("stop", TIMEOUT_MESSAGE)
+    assert not is_truncated("stop", "NameError: x")
 
 
 def test_a_judge_may_not_label_its_own_family():

@@ -13,7 +13,7 @@ import httpx
 import pandas as pd
 import streamlit as st
 
-from llmath.taxonomy import solution_steps
+from llmath.taxonomy import is_truncated, solution_steps
 
 API_URL = os.getenv("LLMATH_API_URL", "http://127.0.0.1:8000")
 STRATEGIES = {"cot": "Adım adım (CoT)", "pot": "SymPy kodu (PoT)"}
@@ -333,8 +333,9 @@ def page_annotate() -> None:
     cols[0].metric("Beklenen", item["gold"])
     cols[1].metric("Model cevabı", item["answer"] or "—")
     cols[2].metric("Doğrulayıcı", STATUS[item["status"]][1], item["layer"], delta_color="off")
-    if item["finish_reason"] == "length":
-        st.warning("Çıktı token sınırında kesilmiş: H13 adayı.")
+    if is_truncated(item["finish_reason"], item["exec_error"]):
+        st.warning("Çıktı yarıda kalmış (token sınırı ya da zaman aşımı). Bu cevap ayrıca H13 sayılır. Tür olarak "
+                   "görünen ilk hatayı seçin; görünür bir hata yoksa H13 seçin.")
     if item["code"]:
         st.code(item["code"], language="python", line_numbers=True)
         st.text("Program çıktısı:\n" + (item["exec_stdout"] or "(boş)"))

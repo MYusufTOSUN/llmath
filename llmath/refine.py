@@ -36,7 +36,7 @@ from .db import Question, Response, Run, SessionLocal, Verification
 from .extract import extract_answer, extract_code, remove_thinking
 from .llm import LLMError, LLMResponse, chat
 from .prompts import PROMPT_VERSION, REFINE_VERSION, build_messages, consistency_messages, fix_feedback
-from .sandbox import run_code, tidy_traceback
+from .sandbox import TIMEOUT_MESSAGE, run_code, tidy_traceback
 from .service import get_or_create_run, model_status, record
 from .solver import SolveResult, program_answer
 from .verify import Verdict, verify
@@ -52,7 +52,7 @@ def pot_problem(method: str, answer: str | None, exec_error: str | None) -> tupl
     if method == "blocked":
         return "blocked", exec_error or ""
     if method == "program_error":
-        if exec_error == "zaman aşımı":
+        if exec_error == TIMEOUT_MESSAGE:
             return "timeout", ""
         return "error", tidy_traceback(exec_error or "")[-1500:]
     if answer is None:

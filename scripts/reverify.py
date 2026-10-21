@@ -23,11 +23,10 @@ sys.path.insert(0, str(ROOT))
 from sqlalchemy import select  # noqa: E402
 
 from llmath.db import Question, Response, Run, SessionLocal, Verification  # noqa: E402
+from llmath.sandbox import TIMEOUT_MESSAGE as TIMEOUT  # noqa: E402
 from llmath.sandbox import run_code  # noqa: E402
 from llmath.solver import program_answer  # noqa: E402
 from llmath.verify import verify  # noqa: E402
-
-TIMEOUT = "zaman aşımı"   # the sandbox's message for a program that ran out of time
 
 
 def rerun(response: Response) -> None:
