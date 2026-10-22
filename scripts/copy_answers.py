@@ -3,8 +3,9 @@
 main_v2 differs from main_v1 only in its re-translated Turkish P1/P2 items ("-tr2"); the English items and
 the template items (P3) are identical. Their answers in main-1 are therefore copied into main-2 together with
 their verdicts and labels (LLM judge and human), and only the new Turkish items are answered again. A
-(question, model, strategy, prompt version) that already exists in the target run is skipped, so the copy
-can be repeated safely, e.g. after a model has answered more English items in main-1.
+(question, model, strategy, prompt version) that already exists in the target run is not copied again; it
+only gets the labels it lacks. The copy can therefore be repeated safely, and should be repeated after a
+model has answered more English items in main-1 or a judge has labelled more of its errors there.
 
 Çalıştırma: python scripts/copy_answers.py --source main-1 --target main-2 --data data/main_v2.jsonl
 """
@@ -13,7 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,30 +35,44 @@ def unchanged_ids(data: Path) -> set[str]:
     return {r["id"] for r in read_jsonl(data) if not r["id"].endswith("-tr2")}
 
 
-def copy(session: Session, source: Run, target: Run, ids: set[str]) -> Counter:
-    existing = {tuple(row) for row in session.execute(
-        select(Response.question_id, Response.model_key, Response.strategy, Response.prompt_version)
-        .where(Response.run_id == target.id))}
+def _labels(session: Session, run: Run) -> dict[int, list[Annotation]]:
+    labels: dict[int, list[Annotation]] = defaultdict(list)
+    for a in session.scalars(select(Annotation).join(Response, Response.id == Annotation.response_id)
+                             .where(Response.run_id == run.id)):
+        labels[a.response_id].append(a)
+    return labels
+
+
+def copy(session: Session, source: Run, target: Run, ids: set[str]) -> tuple[Counter, int]:
+    """Copied answers per (model, strategy), and the number of labels added. A label is identified by its
+    annotator and time, which the copy keeps."""
+    clones = {(r.question_id, r.model_key, r.strategy, r.prompt_version): r
+              for r in session.scalars(select(Response).where(Response.run_id == target.id))}
+    source_labels, target_labels = _labels(session, source), _labels(session, target)
     copied: Counter = Counter()
+    added = 0
     columns = [c.key for c in Response.__table__.columns if c.key not in _SKIP]
     for response in session.scalars(select(Response).where(Response.run_id == source.id, Response.error.is_(None),
                                                             Response.question_id.in_(ids))):
         key = (response.question_id, response.model_key, response.strategy, response.prompt_version)
-        if key in existing:
-            continue
-        clone = Response(run_id=target.id, **{c: getattr(response, c) for c in columns})
-        session.add(clone)
-        session.flush()
-        if response.verification is not None:
-            v = response.verification
-            session.add(Verification(response_id=clone.id, status=v.status, layer=v.layer, detail=v.detail,
-                                     ambiguous_format=v.ambiguous_format, normalized=v.normalized))
-        for a in session.scalars(select(Annotation).where(Annotation.response_id == response.id)):
-            session.add(Annotation(response_id=clone.id, annotator=a.annotator, newman_stage=a.newman_stage,
-                                   error_type=a.error_type, first_error_step=a.first_error_step, note=a.note,
-                                   created_at=a.created_at))
-        copied[(response.model_key, response.strategy)] += 1
-    return copied
+        clone = clones.get(key)
+        if clone is None:
+            clone = Response(run_id=target.id, **{c: getattr(response, c) for c in columns})
+            session.add(clone)
+            session.flush()
+            if response.verification is not None:
+                v = response.verification
+                session.add(Verification(response_id=clone.id, status=v.status, layer=v.layer, detail=v.detail,
+                                         ambiguous_format=v.ambiguous_format, normalized=v.normalized))
+            copied[(response.model_key, response.strategy)] += 1
+        have = {(a.annotator, a.created_at) for a in target_labels.get(clone.id, [])}
+        for a in source_labels.get(response.id, []):
+            if (a.annotator, a.created_at) not in have:
+                session.add(Annotation(response_id=clone.id, annotator=a.annotator, newman_stage=a.newman_stage,
+                                       error_type=a.error_type, first_error_step=a.first_error_step, note=a.note,
+                                       created_at=a.created_at))
+                added += 1
+    return copied, added
 
 
 def main() -> None:
@@ -72,11 +87,11 @@ def main() -> None:
         if source is None:
             sys.exit(f"çalıştırma bulunamadı: {args.source}")
         target = get_or_create_run(session, args.target, {"data": args.data.name, "copied_from": args.source})
-        copied = copy(session, source, target, unchanged_ids(args.data))
+        copied, added = copy(session, source, target, unchanged_ids(args.data))
         session.commit()
     for (model, strategy), n in sorted(copied.items()):
         print(f"  {model:<22} {strategy:<4} {n} cevap kopyalandı")
-    print(f"toplam {sum(copied.values())} cevap {args.source} → {args.target}")
+    print(f"toplam {sum(copied.values())} cevap ve {added} etiket {args.source} → {args.target}")
 
 
 if __name__ == "__main__":

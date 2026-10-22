@@ -54,20 +54,28 @@ def source_run(tmp_path):
 
 def test_only_unchanged_answers_are_copied_with_their_labels_and_only_once(source_run):
     assert copy_answers.unchanged_ids(source_run) == {"v2t-p1-1-en", "v2t-p3-1"}
+    ids = copy_answers.unchanged_ids(source_run)
     with SessionLocal() as s:
         source = s.scalars(select(Run).where(Run.name == "test-v2-source")).one()
         target = Run(name="test-v2-target", config={})
         s.add(target)
         s.flush()
-        first = copy_answers.copy(s, source, target, copy_answers.unchanged_ids(source_run))
-        again = copy_answers.copy(s, source, target, copy_answers.unchanged_ids(source_run))
+        first = copy_answers.copy(s, source, target, ids)
+        english = s.scalars(select(Response).where(Response.run_id == source.id,
+                                                   Response.question_id == "v2t-p1-1-en")).one()
+        s.add(Annotation(response_id=english.id, annotator="llm:judge/j0.5", error_type="H4"))  # labelled later
+        s.flush()
+        again = copy_answers.copy(s, source, target, ids)
+        third = copy_answers.copy(s, source, target, ids)
         s.commit()
         rows = s.scalars(select(Response).where(Response.run_id == target.id)).all()
-        assert sum(first.values()) == 2 and sum(again.values()) == 0
+        assert (sum(first[0].values()), first[1]) == (2, 2)
+        assert (sum(again[0].values()), again[1]) == (0, 1)     # the later label follows, the answer does not
+        assert (sum(third[0].values()), third[1]) == (0, 0)
         assert sorted(r.question_id for r in rows) == ["v2t-p1-1-en", "v2t-p3-1"]   # never the old Turkish
         assert all(r.verification.status == "correct" for r in rows)
         labels = s.scalars(select(Annotation).where(Annotation.response_id.in_([r.id for r in rows]))).all()
-        assert len(labels) == 2
+        assert sorted(a.annotator for a in labels) == ["human", "human", "llm:judge/j0.5"]
 
 
 def test_coverage_shows_the_new_turkish_still_missing(source_run):
