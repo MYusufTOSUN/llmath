@@ -37,6 +37,7 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | Pilot veri setini yeniden üret | `python scripts/build_pilot_set.py` |
 | Ana veri setini yeniden üret | `python scripts/build_main_set.py` (inceleme listesi: `outputs/main_v1_review.md`) |
 | Sayı yazımı setini yeniden üret | `python scripts/build_number_format_set.py` |
+| Türkçe çeviri v2: denetim ve yeni sürüm | `python scripts/build_main_v2.py --check` (sayı ve formül denetimi); bütün çeviriler incelenince `python scripts/build_main_v2.py` → `data/main_v2.jsonl` |
 
 Kullanılabilir model anahtarları `llmath/config.py` içindeki `MODELS` sözlüğündedir: `qwen3-8b`, `qwen3-8b-think`, `llama3.1-8b`, `deepseek-r1-8b`, `phi4-mini-reasoning`, `gemini-flash-lite`, `gemini-flash`. Ollama modelleri indirilmişse, bulut modelleri ise `.env` içinde anahtarı varsa kullanılabilir.
 
@@ -61,6 +62,27 @@ Makine çevirileri elle gözden geçirildi; düzeltmeler gerekçeleriyle birlikt
 Pilotta kullanılan sorular ana sete alınmadı. GSM8K-TR yerelleştirilmiş bir çeviridir: bazı sorularda sayılar değişmiş, bazılarında cevap anahtarı hatalı. Bu yüzden P1'e yalnızca Türkçe çevirisi dosyada beklenen sırada duran ve sayıları ile cevabı İngilizce aslıyla birebir eşleşen sorular alındı (1319 test sorusundan 622'si); cevap anahtarı İngilizce asıldan gelir. Sıra koşulu gereklidir, çünkü az sayılı sorularda başka bir problem rastlantıyla aynı sayıları ve aynı cevabı taşıyabiliyor (19 böyle eşleşme vardı). P1'in Türkçe metinlerinde ondalık ayırıcı virgül, binlik ayırıcı noktadır (2,74; 1.250). P2 metinleri LaTeX olduğu için formüllerdeki sayılar kaynaktaki gibi bırakıldı.
 
 Otomatik kontrollerin işaretlediği 24 öğe incelendi, ardından 200 Türkçe metnin tamamı İngilizce aslıyla yan yana okundu. 14 Türkçe metin düzeltildi. Bunlardan anlamı değiştirenler şunlardı: "segments" kelimesinin "doğrular" diye çevrilmesi, "per meter" ifadesinin "metrekare" diye çevrilmesi, çeviride düşen "en az" ve "her biri", ayrıca üç soruda kaybolan şekil. İngilizce aslı belirsiz olan bir soru çıkarıldı. Kararlar `scripts/build_main_set.py` içinde (`CORRECTIONS`, `CHECKED`, `EXCLUDE`), özetleri `outputs/main_v1_review.md` dosyasındadır.
+
+## Türkçe çeviri v2 (`data/tr_v2/`)
+
+Ana setin Türkçe metinleri hazır makine çevirileriydi:
+- GSM8K-TR, kısmen Gemini 1.5 ile üretilmiş.
+- MCLM MT-MATH100, GPT-4o ile çevrilmiş ve yayımcıları bir insan kontrolünden söz etmiyor.
+
+Yazar 22 Ekim 2026'da bu çevirileri yetersiz buldu. Bunun üzerine 200 sorunun hepsi (120 GSM8K, 80 MATH) İngilizce asıllarından tek tek yeniden çevrildi (Claude). Çeviri kuralları:
+- **Yerelleştirme yok:** İsimler, para birimi ve birimler aslındaki gibi kalır; yalnızca dil değişir.
+- **Sayılar Türkçe yazımla:** 2,74; 88.000.
+- **Formüller ve şekiller:** Kaynaktakiyle birebir aynıdır.
+
+Bir İngilizce adın Türkçe bir sözcükle karışması gibi zorunlu küçük açıklamalar, çeviri dosyasında not olarak kayıtlıdır. "Anne" adı buna örnektir.
+
+`python scripts/build_main_v2.py --check`, her çevirinin sayılarını (GSM8K) ve formüllerini (MATH) İngilizce asılla karşılaştırır.
+
+Yazar 200 çevirinin hepsini arayüzün **Çeviri inceleme** sayfasında İngilizceyle yan yana okur. Kararları `data/tr_v2/inceleme.jsonl` dosyasına yazılır ve düzeltmeleri yeni veri sürümüne (`data/main_v2.jsonl`) uygulanır. Yeni Türkçe sorular `<çift>-tr2` kimliğini alır.
+
+Eski Türkçe sonuçlar "makine çevirisi" koşulu olarak saklanır ve bütün modeller yeni Türkçe metinlerle yeniden koşulur. Böylece çeviri kalitesinin Türkçe–İngilizce farkına etkisi ayrıca ölçülebilir.
+
+Bilinen bir yanlılık riski var: kısmen Gemini ile üretilmiş GSM8K-TR Gemini'yi kayırabileceği gibi, Claude çevirisi de ileride test edilecek Claude modellerini kayırabilir.
 
 ## Doğrulama katmanları (`llmath/verify.py`)
 

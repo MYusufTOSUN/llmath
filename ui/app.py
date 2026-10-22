@@ -13,6 +13,7 @@ import httpx
 import pandas as pd
 import streamlit as st
 
+from llmath import translation_v2
 from llmath.taxonomy import is_truncated, solution_steps
 
 API_URL = os.getenv("LLMATH_API_URL", "http://127.0.0.1:8000")
@@ -403,11 +404,66 @@ def page_annotate() -> None:
         st.rerun()
 
 
-page = st.sidebar.radio("Sayfa", ["Soru çöz", "Deney sonuçları", "Hata etiketleme"])
+# --- Çeviri inceleme --------------------------------------------------------------------------
+
+def page_translation() -> None:
+    st.header("Çeviri inceleme (Türkçe v2)")
+    st.caption("Ana setin GSM8K (P1) ve MATH (P2) sorularının Türkçesi İngilizce asıllarından yeniden çevrildi. "
+               "Kurallar: yerelleştirme yok (isimler, para birimi ve birimler aslındaki gibi), sayılar Türkçe "
+               "yazımla (2,74; 88.000), formüller kaynaktakiyle aynı; [ŞEKİL] kaynaktaki çizimin yeridir. Çeviri "
+               "doğruysa onaylayın, değilse Türkçe metni düzeltip kaydedin. Kararlar data/tr_v2/inceleme.jsonl "
+               "dosyasına yazılır; aynı soruya yeniden karar verirseniz son karar geçerli olur.")
+    items, reviews = translation_v2.load_items(), translation_v2.load_reviews()
+    done = sum(1 for item in items if item["pair_id"] in reviews)
+    corrected = sum(1 for review in reviews.values() if review["status"] == "duzeltme")
+    st.progress(done / len(items), text=f"{done}/{len(items)} soru incelendi ({corrected} düzeltme)")
+
+    left, right = st.columns(2)
+    subset = left.selectbox("Alt küme", ["(hepsi)", "P1", "P2"], format_func=lambda s: SUBSET_LABELS.get(s, s))
+    only_open = right.toggle("Yalnız incelenmemiş sorular", value=True)
+    pool = [item for item in items if (subset == "(hepsi)" or item["subset"] == subset)
+            and not (only_open and item["pair_id"] in reviews)]
+    if not pool:
+        st.success("Bu seçimde incelenecek soru kalmadı.")
+        return
+    item = st.selectbox("Soru", pool, format_func=lambda i: f"{i['pair_id']} · {i['subset']}")
+    pid, review = item["pair_id"], reviews.get(item["pair_id"])
+
+    english, turkish = st.columns(2)
+    english.markdown("**İngilizce asıl**")
+    english.markdown(as_markdown(translation_v2.without_figures(item["en"])))
+    english.caption(f"Cevap anahtarı: {item['gold']}")
+    turkish.markdown("**Türkçe çeviri (v2)**")
+    turkish.markdown(as_markdown(translation_v2.current_text(item, reviews)))
+    for note in item["notes"]:
+        st.info(note)
+    if item["old"]:
+        with st.expander("Eski makine çevirisi (v1), karşılaştırma için"):
+            st.markdown(as_markdown(translation_v2.without_figures(item["old"])))
+    if review:
+        st.caption(f"Önceki karar: {'onaylandı' if review['status'] == 'onay' else 'düzeltildi'}"
+                   + (f" · yorum: {review['comment']}" if review.get("comment") else ""))
+
+    text = st.text_area("Türkçe metin (düzeltmek için burada değiştirin; [ŞEKİL] işaretini silmeyin)",
+                        value=translation_v2.current_text(item, reviews), height=220, key=f"tr-{pid}")
+    comment = st.text_input("Yorum (isteğe bağlı)", key=f"comment-{pid}")
+    approve, fix = st.columns(2)
+    if approve.button("Onayla", type="primary", disabled=text.strip() != item["tr"].strip(),
+                      help="Claude'un çevirisini olduğu gibi kabul eder"):
+        translation_v2.save_review(pid, "onay", comment=comment)
+        st.rerun()
+    if fix.button("Düzeltmeyi kaydet", disabled=text.strip() == item["tr"].strip()):
+        translation_v2.save_review(pid, "duzeltme", text=text, comment=comment)
+        st.rerun()
+
+
+page = st.sidebar.radio("Sayfa", ["Soru çöz", "Deney sonuçları", "Hata etiketleme", "Çeviri inceleme"])
 st.sidebar.caption(f"API: {API_URL}")
 if page == "Soru çöz":
     page_solve()
 elif page == "Deney sonuçları":
     page_results()
-else:
+elif page == "Hata etiketleme":
     page_annotate()
+else:
+    page_translation()
