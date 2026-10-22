@@ -78,6 +78,42 @@ def test_only_unchanged_answers_are_copied_with_their_labels_and_only_once(sourc
         assert sorted(a.annotator for a in labels) == ["human", "human", "llm:judge/j0.5"]
 
 
+def test_answers_to_an_identical_old_text_are_copied_under_the_new_id(source_run, tmp_path):
+    data = tmp_path / "same.jsonl"
+    data.write_text(json.dumps({"id": "v2t-p1-1-tr2", "subset": "P1", "lang": "tr", "text": "v2t-p1-1-tr"}),
+                    encoding="utf-8")   # the old item's text, byte for byte
+    with SessionLocal() as s:
+        aliases = copy_answers.same_text_ids(s, data)
+        assert aliases == {"v2t-p1-1-tr": "v2t-p1-1-tr2"}
+        source = s.scalars(select(Run).where(Run.name == "test-v2-source")).one()
+        target = Run(name="test-v2-target", config={})
+        s.add(target)
+        s.flush()
+        copied, _ = copy_answers.copy(s, source, target, set(), aliases)
+        s.commit()
+        rows = s.scalars(select(Response).where(Response.run_id == target.id)).all()
+        assert [r.question_id for r in rows] == ["v2t-p1-1-tr2"] and sum(copied.values()) == 1
+    data.write_text(json.dumps({"id": "v2t-p1-1-tr2", "subset": "P1", "lang": "tr", "text": "Aynı anlam."}),
+                    encoding="utf-8")   # same meaning is not enough
+    with SessionLocal() as s:
+        assert copy_answers.same_text_ids(s, data) == {}
+
+
+def test_an_answer_to_a_text_corrected_later_is_found_and_dropped(source_run):
+    with SessionLocal() as s:
+        s.get(Question, "v2t-p1-1-en").text = "Düzeltilmiş metin."
+        s.commit()
+        source = s.scalars(select(Run).where(Run.name == "test-v2-source")).one()
+        stale = check_coverage.stale_answers(s, source.id)
+        assert [r.question_id for r in stale] == ["v2t-p1-1-en"]
+        check_coverage.drop(s, stale)
+        s.commit()
+        assert check_coverage.stale_answers(s, source.id) == []
+        left = s.scalars(select(Response).where(Response.run_id == source.id)).all()
+        assert sorted(r.question_id for r in left) == ["v2t-p1-1-tr", "v2t-p3-1"]
+        assert len(s.scalars(select(Annotation).where(Annotation.response_id.in_([r.id for r in left]))).all()) == 2
+
+
 def test_coverage_shows_the_new_turkish_still_missing(source_run):
     rows = [json.loads(line) for line in source_run.read_text(encoding="utf-8").splitlines()]
     answered = {("v2t-p1-1-en", "qwen3-8b", "cot"), ("v2t-p3-1", "qwen3-8b", "cot")}

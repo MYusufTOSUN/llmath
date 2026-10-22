@@ -38,6 +38,9 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | Ana veri setini yeniden üret | `python scripts/build_main_set.py` (inceleme listesi: `outputs/main_v1_review.md`) |
 | Sayı yazımı setini yeniden üret | `python scripts/build_number_format_set.py` |
 | Türkçe çeviri v2: denetim ve yeni sürüm | `python scripts/build_main_v2.py --check` (sayı ve formül denetimi); her çeviri için karar verilince `python scripts/build_main_v2.py` → `data/main_v2.jsonl` |
+| main-2: değişmeyen cevapları kopyala | `python scripts/copy_answers.py --source main-1 --target main-2 --data data/main_v2.jsonl` (İngilizce, şablon ve metni birebir aynı kalan sorular; tekrar çalıştırmak güvenli) |
+| main-2: yeni Türkçeyi çöz | `python -m llmath.runner --name main-2 --data data/main_v2.jsonl --models <model> --subsets P1 P2 --langs tr` |
+| main-2: kapsam denetimi | `python scripts/check_coverage.py --name main-2 --data data/main_v2.jsonl` (eksik, eski çeviriyle ya da sonradan düzeltilmiş metinle verilmiş cevap varsa hata verir; `--drop-stale` sonradan düzeltilen sorulara verilmiş cevapları siler) |
 
 Kullanılabilir model anahtarları `llmath/config.py` içindeki `MODELS` sözlüğündedir: `qwen3-8b`, `qwen3-8b-think`, `llama3.1-8b`, `deepseek-r1-8b`, `phi4-mini-reasoning`, `gemini-flash-lite`, `gemini-flash`. Ollama modelleri indirilmişse, bulut modelleri ise `.env` içinde anahtarı varsa kullanılabilir.
 
@@ -88,6 +91,8 @@ Yazar çevirileri arayüzün **Çeviri inceleme** sayfasında İngilizceyle yan 
 Bu yüzden insan denetimi GSM8K çevirilerinin 45'ini kapsar. MATH çevirilerinin hiçbiri insan tarafından okunmadı.
 
 Eski Türkçe sonuçlar "makine çevirisi" koşulu olarak saklanır ve bütün modeller yeni Türkçe metinlerle yeniden koşulur. Böylece çeviri kalitesinin Türkçe–İngilizce farkına etkisi ayrıca ölçülebilir.
+
+Yeni sonuçlar `main-2` çalıştırmasındadır. Eski çeviriyle anlamca aynı olan sorular da yeniden çözülür, çünkü modeller anlamı değil metni okur. Yalnızca m-p2-069'un metni eski çeviriyle birebir aynıdır; onun main-1 cevapları kopyalandı. İngilizce ve şablon sorularının cevapları da main-1'den kopyalanır, çünkü bu metinler iki sürümde aynıdır.
 
 Bilinen bir yanlılık riski var: kısmen Gemini ile üretilmiş GSM8K-TR Gemini'yi kayırabileceği gibi, Claude çevirisi de ileride test edilecek Claude modellerini kayırabilir.
 

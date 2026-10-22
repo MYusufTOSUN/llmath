@@ -7,6 +7,10 @@ their verdicts and labels (LLM judge and human), and only the new Turkish items 
 only gets the labels it lacks. The copy can therefore be repeated safely, and should be repeated after a
 model has answered more English items in main-1 or a judge has labelled more of its errors there.
 
+A re-translated item whose text is byte for byte the old machine translation (only m-p2-069) is the same
+input to a model, so its main-1 answers to the old item are copied too, under the new id. Items that only
+mean the same are answered again (the author's decision of 2026-10-22): models read text, not meaning.
+
 Çalıştırma: python scripts/copy_answers.py --source main-1 --target main-2 --data data/main_v2.jsonl
 """
 
@@ -24,7 +28,7 @@ from sqlalchemy import select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from llmath.dataset import import_questions, read_jsonl  # noqa: E402
-from llmath.db import Annotation, Response, Run, SessionLocal, Verification  # noqa: E402
+from llmath.db import Annotation, Question, Response, Run, SessionLocal, Verification  # noqa: E402
 from llmath.service import get_or_create_run  # noqa: E402
 
 _SKIP = {"id", "run_id", "run", "question", "verification"}
@@ -35,6 +39,17 @@ def unchanged_ids(data: Path) -> set[str]:
     return {r["id"] for r in read_jsonl(data) if not r["id"].endswith("-tr2")}
 
 
+def same_text_ids(session: Session, data: Path) -> dict[str, str]:
+    """{old id: new id} for the re-translated items whose text equals the old translation byte for byte."""
+    aliases = {}
+    for row in read_jsonl(data):
+        if row["id"].endswith("-tr2"):
+            old = session.get(Question, row["id"][:-1])
+            if old is not None and old.text == row["text"]:
+                aliases[old.id] = row["id"]
+    return aliases
+
+
 def _labels(session: Session, run: Run) -> dict[int, list[Annotation]]:
     labels: dict[int, list[Annotation]] = defaultdict(list)
     for a in session.scalars(select(Annotation).join(Response, Response.id == Annotation.response_id)
@@ -43,9 +58,11 @@ def _labels(session: Session, run: Run) -> dict[int, list[Annotation]]:
     return labels
 
 
-def copy(session: Session, source: Run, target: Run, ids: set[str]) -> tuple[Counter, int]:
-    """Copied answers per (model, strategy), and the number of labels added. A label is identified by its
-    annotator and time, which the copy keeps."""
+def copy(session: Session, source: Run, target: Run, ids: set[str],
+         aliases: dict[str, str] | None = None) -> tuple[Counter, int]:
+    """Copied answers per (model, strategy), and the number of labels added. An answer to an id in `aliases`
+    is copied under the new id. A label is identified by its annotator and time, which the copy keeps."""
+    aliases = aliases or {}
     clones = {(r.question_id, r.model_key, r.strategy, r.prompt_version): r
               for r in session.scalars(select(Response).where(Response.run_id == target.id))}
     source_labels, target_labels = _labels(session, source), _labels(session, target)
@@ -53,11 +70,13 @@ def copy(session: Session, source: Run, target: Run, ids: set[str]) -> tuple[Cou
     added = 0
     columns = [c.key for c in Response.__table__.columns if c.key not in _SKIP]
     for response in session.scalars(select(Response).where(Response.run_id == source.id, Response.error.is_(None),
-                                                            Response.question_id.in_(ids))):
-        key = (response.question_id, response.model_key, response.strategy, response.prompt_version)
+                                                            Response.question_id.in_(set(ids) | set(aliases)))):
+        question_id = aliases.get(response.question_id, response.question_id)
+        key = (question_id, response.model_key, response.strategy, response.prompt_version)
         clone = clones.get(key)
         if clone is None:
-            clone = Response(run_id=target.id, **{c: getattr(response, c) for c in columns})
+            clone = Response(run_id=target.id,
+                             **{c: getattr(response, c) for c in columns} | {"question_id": question_id})
             session.add(clone)
             session.flush()
             if response.verification is not None:
@@ -87,11 +106,13 @@ def main() -> None:
         if source is None:
             sys.exit(f"çalıştırma bulunamadı: {args.source}")
         target = get_or_create_run(session, args.target, {"data": args.data.name, "copied_from": args.source})
-        copied, added = copy(session, source, target, unchanged_ids(args.data))
+        aliases = same_text_ids(session, args.data)
+        copied, added = copy(session, source, target, unchanged_ids(args.data), aliases)
         session.commit()
     for (model, strategy), n in sorted(copied.items()):
         print(f"  {model:<22} {strategy:<4} {n} cevap kopyalandı")
     print(f"toplam {sum(copied.values())} cevap ve {added} etiket {args.source} → {args.target}")
+    print(f"metni eski çeviriyle birebir aynı yeni soru: {', '.join(sorted(aliases.values())) or 'yok'}")
 
 
 if __name__ == "__main__":
