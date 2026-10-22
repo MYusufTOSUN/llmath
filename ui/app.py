@@ -54,6 +54,10 @@ def call(method: str, path: str, **kwargs):
 
 
 _MATH_SPAN = re.compile(r"\$\$.*?\$\$|\$[^$\n]+\$", re.DOTALL)
+# A "$$" at the start of a line opens a display block only when it stands alone on that line: "$$ f(x) =" with
+# the closing "$$" on a later line never closes, and the rest of the text shows as raw LaTeX in red. Such
+# formulas get lines of their own.
+_OPEN_DISPLAY = re.compile(r"(^|\n)\$\$([^$\n]*\n[^$]*?)\$\$[ \t]*", re.DOTALL)
 _BOXED = re.compile(r"\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}")
 
 
@@ -62,6 +66,7 @@ def as_markdown(text: str) -> str:
     final \\boxed{...} outside any math, where it would show as raw LaTeX."""
     text = re.sub(r"\\\[(.+?)\\\]", lambda m: "$$" + m.group(1) + "$$", text, flags=re.DOTALL)
     text = re.sub(r"\\\((.+?)\\\)", lambda m: "$" + m.group(1) + "$", text, flags=re.DOTALL)
+    text = _OPEN_DISPLAY.sub(lambda m: f"{m.group(1)}$$\n{m.group(2).strip()}\n$$\n", text)
     pieces, last = [], 0
     for match in _MATH_SPAN.finditer(text):
         pieces += [_BOXED.sub(lambda m: f"${m.group(0)}$", text[last:match.start()]), match.group(0)]
@@ -413,6 +418,8 @@ def page_translation() -> None:
                "yazımla (2,74; 88.000), formüller kaynaktakiyle aynı; [ŞEKİL] kaynaktaki çizimin yeridir. Çeviri "
                "doğruysa onaylayın, değilse Türkçe metni düzeltip kaydedin. Kararlar data/tr_v2/inceleme.jsonl "
                "dosyasına yazılır; aynı soruya yeniden karar verirseniz son karar geçerli olur.")
+    st.warning("Tarayıcının otomatik çevirisi bu sayfada kapalı olmalı. Açıkken İngilizce asıl makine çevirisiyle "
+               "değişir, Türkçe metin de bozulur ve sayfa \"removeChild\" hatası verir.")
     items, reviews = translation_v2.load_items(), translation_v2.load_reviews()
     read = {pid for pid, review in reviews.items() if review["status"] in translation_v2.READ}
     corrected = sum(1 for review in reviews.values() if review["status"] == "duzeltme")
