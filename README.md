@@ -76,17 +76,23 @@ Ucuz model soruyu hem CoT hem PoT ile çözer. İki cevap uyuşursa kabul edilir
 
 ## İlk ana deney (main-1)
 
-Ana setin 500 sorusu Qwen3 8B (yerel) ve Gemini 3.5 Flash-Lite (ücretsiz API) ile adım adım (CoT) ve SymPy koduyla (PoT) çözüldü: 2.000 cevap, sıcaklık 0, istem sürümü v0.1.
+Ana setin 500 sorusu Qwen3 8B (yerel) ve Gemini 3.5 Flash-Lite (ücretsiz API) ile adım adım (CoT) ve SymPy koduyla (PoT) çözüldü: 2.000 cevap, sıcaklık 0, istem sürümü v0.1. 21–22 Ekim 2026'da Llama 3.1 8B (yerel) aynı protokolle eklendi; toplam 3.000 cevap.
 
 | Model | CoT | PoT |
 | --- | --- | --- |
 | Gemini 3.5 Flash-Lite | %97,8 (489/500) | %90,8 (454/500) |
 | Qwen3 8B | %89,4 (447/500) | %78,8 (394/500) |
+| Llama 3.1 8B | %51,2 (256/500) | %51,0 (255/500) |
+
+- **Llama 3.1 8B ve Türkçe:** Türkçe–İngilizce farkı çok büyük ve dört karşılaştırmanın hepsinde anlamlı.
+  - CoT'ta GSM8K'da İngilizce %90, Türkçe %62 (−27,5 puan); MATH'te İngilizce %44, Türkçe %14 (−30,0 puan). Şablon sorularında %27.
+  - PoT'ta fark GSM8K'da −19,2, MATH'te −18,8 puan (hepsi p ≤ 0,004).
+  - Nedenlerden biri şu: Türkçe CoT cevaplarının %38'i, cevap verilmeden 4.096 token sınırında kesiliyor; İngilizcede bu oran %9.
 
 - **Türkçe–İngilizce:** Aynı sorular karşılaştırıldığında Qwen3 8B Türkçede anlamlı biçimde geride kalıyor. CoT'ta fark GSM8K'da −9,2, MATH'te −11,3 puan (McNemar p = 0,003 ve 0,049). Gemini'de CoT için anlamlı fark yok; PoT'ta MATH sorularında fark −11,3 puan (p = 0,022).
 - **CoT ve PoT:** CoT, iki modelde de iki dilde de PoT'den anlamlı ölçüde iyi.
 - **Kademeli çözüm:** Qwen'in CoT ve PoT cevapları uyuşursa cevap kabul ediliyor, uyuşmazsa soru Gemini'ye gidiyor. Doğruluk %97,4; Gemini tek başına %97,8 (p = 0,754). Gemini 500 yerine 126 kez çağrılıyor.
-- **Ondalık virgül:** İki model de PoT'ta Türkçe ondalık virgülü yanlış okuyor ("8,4" → `Rational(8, 4)`). Bu, pilotta görülen hatanın aynısı.
+- **Ondalık virgül:** İki model de PoT'ta Türkçe ondalık virgülü yanlış okuyor ("8,4" → `Rational(8, 4)`). Bu, pilotta görülen hatanın aynısı. Hedefli deney aşağıda.
 
 Ayrıntılı tablolar `python scripts/report.py --name main-1 --cascade qwen3-8b gemini-flash-lite --out outputs/main-1.md` ile üretilir.
 
@@ -151,6 +157,17 @@ Bu yüzden düşünen modeller kendi önerilen ayarlarıyla çalışır:
 Bağlam önce 16.384 tokene çıkarıldı. Ama 8 GB'lık RTX 5060'ta bu boyutta 8B'lik bir modelin %20'si işlemciye taşındı ve hız saniyede 65 tokenden 24 tokene düştü. 9.216'da bile model karta tam sığmadı. Bu yüzden bağlam 8.192'de kaldı. Çıktı en fazla 7.680 tokendir; böylece uzun bir cevap bağlamı aşıp soruyu dışarı itmek yerine temiz biçimde kesilir.
 
 Öteki modeller main-1'deki gibi sıcaklık 0 ile çalışır. LLM-hakem de her zaman sıcaklık 0 ile çalışır. Her çalıştırmada kullanılan ayarlar çalıştırma kaydına (`config.sampling`) yazılır.
+
+Yeni ayarlarla ölçüm (`dusunen-olcum-3`, 22 Ekim 2026, aynı 20 soru):
+
+| Model | CoT (ilk ölçüm → yeni) | PoT (ilk ölçüm → yeni) | Ort. süre CoT / PoT | Kesilen CoT / PoT |
+| --- | --- | --- | --- | --- |
+| Qwen3 8B, düşünme açık | 19 → 18 | 15 → 18 | 52 / 53 sn | 2 / 1 |
+| Phi-4-mini-reasoning | 11 → 18 | 0 → 7 | 30 / 45 sn | 3 / 5 |
+| DeepSeek-R1 8B | 11 → 14 | 0 → 11 | 65 / 63 sn | 6 / 6 |
+| *Karşılaştırma: Qwen3 8B, düşünme kapalı (main-1)* | 17 | 15 | 13 / 5 sn | 2 / 0 |
+
+Tekrar döngüleri büyük ölçüde ortadan kalktı. Phi'nin PoT'si hâlâ çoğunlukla kod üretmiyor. DeepSeek-R1'in uzun düşünmesi bazı MATH sorularında 7.680 token sınırına takılıyor. Bu sürelerle 500 sorunun CoT'si model başına 4–9 saat sürüyor. Ana sette nasıl koşulacağına bu sonuçlara göre karar verilecek.
 
 ## Hata etiketleme (`llmath/taxonomy.py`)
 
