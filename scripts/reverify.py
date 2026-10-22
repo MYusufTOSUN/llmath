@@ -3,7 +3,9 @@
 Use it after a change to the sandbox or the verifier, so that all answers of a run are judged by
 the same rules. Models are not called again: stored outputs and programs are reused. Programs that
 the sandbox blocked or that timed out are executed again (a timeout depends on how busy the
-machine was). Changed verdicts are written to outputs/reverify-<run>-<time>.csv for the record.
+machine was), and so are programs whose stored output has U+FFFD characters (before 2026-10-22 the
+sandbox read Turkish output in the wrong encoding). Changed verdicts are written to
+outputs/reverify-<run>-<time>.csv for the record.
 
 Çalıştırma: python scripts/reverify.py --name main-1 [--dry-run]
 """
@@ -55,7 +57,8 @@ def main() -> None:
         changes, reruns = [], 0
         for response, verification, question in rows:
             before = (verification.status, verification.layer, response.extracted_answer)
-            if response.code and (response.extraction_method == "blocked" or response.exec_error == TIMEOUT):
+            garbled = "�" in (response.exec_stdout or "")   # Turkish output read in the wrong encoding
+            if response.code and (response.extraction_method == "blocked" or response.exec_error == TIMEOUT or garbled):
                 rerun(response)
                 reruns += 1
             verdict = verify(question.gold, response.extracted_answer, question.answer_type)

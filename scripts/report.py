@@ -74,9 +74,8 @@ def language_table(rows) -> list[str]:
         only_en, only_tr, p = mcnemar_exact(en, tr)
         diff = 100 * (sum(tr) - sum(en)) / len(en)
         lines.append(f"| {model} | {STRATEGY.get(strategy, strategy)} | {subset} | {len(en)} | "
-                     f"{pct(sum(en), len(en))} | {pct(sum(tr), len(tr))} | {diff:+.1f}".replace(".", ",") +
-                     f" | {only_en} | {only_tr} | "
-                     f"{p_value(p)} |")
+                     f"{pct(sum(en), len(en))} | {pct(sum(tr), len(tr))} | {f'{diff:+.1f}'.replace('.', ',')} | "
+                     f"{only_en} | {only_tr} | {p_value(p)} |")
     return lines
 
 

@@ -55,6 +55,11 @@ def test_sandbox_timeout():
     assert result.timed_out and not result.ok
 
 
+def test_sandbox_keeps_turkish_text_intact():
+    result = run_code('print("Toplam değerli taş sayısı: 420 ğüşıöçİ")')
+    assert result.ok and result.answer == "Toplam değerli taş sayısı: 420 ğüşıöçİ"
+
+
 def test_tracebacks_carry_no_local_paths():
     result = run_code("from sympy import Rational\nprint(Rational(1, 0) + undefined_name)")
     assert "solution.py" in result.stderr and "NameError" in result.stderr

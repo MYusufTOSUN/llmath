@@ -84,7 +84,9 @@ def run_code(code: str, timeout: float = 15.0) -> ExecResult:
         script.write_text(code, encoding="utf-8")
         try:
             proc = subprocess.run(
-                [sys.executable, "-I", str(script)],
+                # -I ignores PYTHON* variables, so UTF-8 output is switched on with -X utf8 instead;
+                # without it Turkish text came back as cp1254 bytes read as UTF-8 ("de�erli ta�")
+                [sys.executable, "-I", "-X", "utf8", str(script)],
                 cwd=tmp, env=child_env(tmp), capture_output=True, text=True,
                 encoding="utf-8", errors="replace", timeout=timeout,
             )
