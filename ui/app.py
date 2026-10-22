@@ -414,15 +414,17 @@ def page_translation() -> None:
                "doğruysa onaylayın, değilse Türkçe metni düzeltip kaydedin. Kararlar data/tr_v2/inceleme.jsonl "
                "dosyasına yazılır; aynı soruya yeniden karar verirseniz son karar geçerli olur.")
     items, reviews = translation_v2.load_items(), translation_v2.load_reviews()
-    done = sum(1 for item in items if item["pair_id"] in reviews)
+    read = {pid for pid, review in reviews.items() if review["status"] in translation_v2.READ}
     corrected = sum(1 for review in reviews.values() if review["status"] == "duzeltme")
-    st.progress(done / len(items), text=f"{done}/{len(items)} soru incelendi ({corrected} düzeltme)")
+    unread = sum(1 for review in reviews.values() if review["status"] == "toplu_onay")
+    st.progress(len(read) / len(items), text=f"{len(read)}/{len(items)} soru okundu ({corrected} düzeltme)"
+                + (f", {unread} soru okunmadan onaylandı" if unread else ""))
 
     left, right = st.columns(2)
     subset = left.selectbox("Alt küme", ["(hepsi)", "P1", "P2"], format_func=lambda s: SUBSET_LABELS.get(s, s))
-    only_open = right.toggle("Yalnız incelenmemiş sorular", value=True)
+    only_open = right.toggle("Yalnız okunmamış sorular", value=True)
     pool = [item for item in items if (subset == "(hepsi)" or item["subset"] == subset)
-            and not (only_open and item["pair_id"] in reviews)]
+            and not (only_open and item["pair_id"] in read)]
     if not pool:
         st.success("Bu seçimde incelenecek soru kalmadı.")
         return
@@ -441,7 +443,8 @@ def page_translation() -> None:
         with st.expander("Eski makine çevirisi (v1), karşılaştırma için"):
             st.markdown(as_markdown(translation_v2.without_figures(item["old"])))
     if review:
-        st.caption(f"Önceki karar: {'onaylandı' if review['status'] == 'onay' else 'düzeltildi'}"
+        decision = {"onay": "onaylandı", "duzeltme": "düzeltildi", "toplu_onay": "okunmadan toplu onaylandı"}
+        st.caption(f"Önceki karar: {decision[review['status']]}"
                    + (f" · yorum: {review['comment']}" if review.get("comment") else ""))
 
     text = st.text_area("Türkçe metin (düzeltmek için burada değiştirin; [ŞEKİL] işaretini silmeyin)",

@@ -3,12 +3,13 @@
 The author rejected the machine-translated Turkish of main_v1 (GSM8K-TR, made with Gemini 1.5; MCLM
 MT-MATH100, made with GPT-4o) on 2026-10-22. The new translations live in data/tr_v2/ (see
 llmath/translation_v2.py): no localization (names, currency and units as in the English), Turkish number
-writing outside math, LaTeX math kept exactly as in the source. The author reviews every item on the
-"Çeviri inceleme" page; corrections replace the translation.
+writing outside math, LaTeX math kept exactly as in the source. The author decides on every item on the
+"Çeviri inceleme" page; corrections replace the translation. Each new item's source field says whether the
+author read it ("okuyup onayladı", "okuyup düzeltti") or approved it unread ("okumadan toplu onayladı").
 
 Checks, also on the author's corrections: a P1 translation has exactly the numbers of its English original
 (separators aside), a P2 translation has exactly the same math segments, every [ŞEKİL] mark matches a figure.
-main_v2 is written only when all 200 items are reviewed and pass. The new Turkish items get the id
+main_v2 is written only when all 200 items have a decision and pass. The new Turkish items get the id
 "<pair id>-tr2", so main_v1, its Turkish items and main-1 stay as they were; English and P3 (template)
 items are copied unchanged.
 
@@ -28,10 +29,17 @@ sys.path.insert(0, str(ROOT))
 
 from llmath.config import DATA_DIR, MAIN_FILE  # noqa: E402
 from llmath.dataset import read_jsonl, write_jsonl  # noqa: E402
-from llmath.translation_v2 import current_text, load_items, load_reviews, with_figures  # noqa: E402
+from llmath.translation_v2 import READ, current_text, load_items, load_reviews, with_figures  # noqa: E402
 
 OUT = DATA_DIR / "main_v2.jsonl"
-TRANSLATOR = "Claude (Anthropic) çevirisi, 2026-10-22, yazar tarafından gözden geçirildi"
+TRANSLATOR = "Claude (Anthropic) çevirisi, 2026-10-22"
+DECISION = {"onay": "yazar okuyup onayladı", "duzeltme": "yazar okuyup düzeltti",
+            "toplu_onay": "yazar okumadan toplu onayladı"}
+
+
+def source_of(status: str, english_source: str) -> str:
+    """The source field of a new Turkish item: who translated it and whether the author read it."""
+    return f"{TRANSLATOR}, {DECISION[status]}; İngilizce asıl: {english_source}"
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 # Math as it appears in MATH problems; "\$" is a dollar sign in text, not a delimiter.
@@ -115,16 +123,17 @@ def main() -> None:
     translated = {item["pair_id"] for item in items}
     texts, report = final_texts(items, reviews)
     unreviewed = sorted(translated - set(reviews))
-    corrected = sum(1 for pid in translated if reviews.get(pid, {}).get("status") == "duzeltme")
+    decisions = Counter(reviews[pid]["status"] for pid in translated if pid in reviews)
 
     print(f"{len(items)} çeviri; {len(english - translated)} eksik, {len(report)} sorunlu; "
-          f"{len(translated) - len(unreviewed)} incelendi ({corrected} düzeltme), {len(unreviewed)} incelenmedi")
+          f"{sum(decisions[s] for s in READ)} okundu ({decisions['duzeltme']} düzeltme), "
+          f"{decisions['toplu_onay']} okunmadan onaylandı, {len(unreviewed)} kararsız")
     for pid, issues in report:
         print(f"  {pid}: {'; '.join(issues)}")
     if args.check:
         return
     if english - translated or report or unreviewed:
-        sys.exit("bütün çeviriler incelenmeden ve sorunlar çözülmeden main_v2 yazılmaz")
+        sys.exit("her çeviri için karar verilmeden ve sorunlar çözülmeden main_v2 yazılmaz")
 
     subsets = {item["subset"] for item in items}
     rows = []
@@ -138,7 +147,7 @@ def main() -> None:
             review = reviews[pid]
             note = " ".join(item["notes"] + ([f"Yazarın notu: {review['comment']}"] if review.get("comment") else []))
             rows.append({**row, "id": f"{pid}-tr2", "lang": "tr", "text": texts[pid],
-                         "source": f"{TRANSLATOR}; İngilizce asıl: {row['source']}", "note": note or None})
+                         "source": source_of(review["status"], row["source"]), "note": note or None})
     write_jsonl(OUT, rows)
     print(f"{len(rows)} öğe yazıldı: {OUT}")
 

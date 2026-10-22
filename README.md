@@ -37,7 +37,7 @@ Aşağıdaki komutlar proje klasöründe, sanal ortamın Python'u ile çalışt�
 | Pilot veri setini yeniden üret | `python scripts/build_pilot_set.py` |
 | Ana veri setini yeniden üret | `python scripts/build_main_set.py` (inceleme listesi: `outputs/main_v1_review.md`) |
 | Sayı yazımı setini yeniden üret | `python scripts/build_number_format_set.py` |
-| Türkçe çeviri v2: denetim ve yeni sürüm | `python scripts/build_main_v2.py --check` (sayı ve formül denetimi); bütün çeviriler incelenince `python scripts/build_main_v2.py` → `data/main_v2.jsonl` |
+| Türkçe çeviri v2: denetim ve yeni sürüm | `python scripts/build_main_v2.py --check` (sayı ve formül denetimi); her çeviri için karar verilince `python scripts/build_main_v2.py` → `data/main_v2.jsonl` |
 
 Kullanılabilir model anahtarları `llmath/config.py` içindeki `MODELS` sözlüğündedir: `qwen3-8b`, `qwen3-8b-think`, `llama3.1-8b`, `deepseek-r1-8b`, `phi4-mini-reasoning`, `gemini-flash-lite`, `gemini-flash`. Ollama modelleri indirilmişse, bulut modelleri ise `.env` içinde anahtarı varsa kullanılabilir.
 
@@ -74,11 +74,18 @@ Yazar 22 Ekim 2026'da bu çevirileri yetersiz buldu. Bunun üzerine 200 sorunun 
 - **Sayılar Türkçe yazımla:** 2,74; 88.000.
 - **Formüller ve şekiller:** Kaynaktakiyle birebir aynıdır.
 
-Bir İngilizce adın Türkçe bir sözcükle karışması gibi zorunlu küçük açıklamalar, çeviri dosyasında not olarak kayıtlıdır. "Anne" adı buna örnektir.
+Bir İngilizce adın Türkçe bir sözcükle karışması gibi zorunlu küçük açıklamalar, çeviri dosyasında not olarak kayıtlıdır. "Anne" adı buna örnektir; yazar incelemede bu adı "Max" yaptı.
 
 `python scripts/build_main_v2.py --check`, her çevirinin sayılarını (GSM8K) ve formüllerini (MATH) İngilizce asılla karşılaştırır.
 
-Yazar 200 çevirinin hepsini arayüzün **Çeviri inceleme** sayfasında İngilizceyle yan yana okur. Kararları `data/tr_v2/inceleme.jsonl` dosyasına yazılır ve düzeltmeleri yeni veri sürümüne (`data/main_v2.jsonl`) uygulanır. Yeni Türkçe sorular `<çift>-tr2` kimliğini alır.
+Yazar çevirileri arayüzün **Çeviri inceleme** sayfasında İngilizceyle yan yana okur. Kararları `data/tr_v2/inceleme.jsonl` dosyasına yazılır ve düzeltmeleri yeni veri sürümüne (`data/main_v2.jsonl`) uygulanır. Yeni Türkçe sorular `<çift>-tr2` kimliğini alır.
+
+İnceleme 22 Ekim 2026'da şöyle sonuçlandı:
+- **Okunan 45 çeviri:** Yazar ilk 45 GSM8K çevirisini okudu ve anlamı bozan bir hata bulmadı. İki küçük düzeltme yaptı: "Anne" adı "Max" oldu, "5:6" oranı "5/6" diye yazıldı.
+- **Okunmadan onaylanan 155 çeviri:** Kalan 75 GSM8K ve 80 MATH çevirisi okunmadan onaylandı. Bunlar yalnızca otomatik sayı ve formül denetiminden geçti. `inceleme.jsonl` dosyasında `toplu_onay` kararıyla, `main_v2.jsonl` dosyasında kaynak alanında "yazar okumadan toplu onayladı" ifadesiyle işaretlidir.
+- **m-p1-0163:** İngilizce aslı belirsiz olan bu soru sette kaldı. Çevirisi cevap anahtarının okumasını izler.
+
+Bu yüzden insan denetimi GSM8K çevirilerinin 45'ini kapsar. MATH çevirilerinin hiçbiri insan tarafından okunmadı.
 
 Eski Türkçe sonuçlar "makine çevirisi" koşulu olarak saklanır ve bütün modeller yeni Türkçe metinlerle yeniden koşulur. Böylece çeviri kalitesinin Türkçe–İngilizce farkına etkisi ayrıca ölçülebilir.
 

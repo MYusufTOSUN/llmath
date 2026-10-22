@@ -3,9 +3,12 @@
 Claude translated the 200 items from their English originals on 2026-10-22, after the author rejected the
 machine-translated Turkish of main_v1. Translations live in data/tr_v2/p1.md and p2.md, one "### <pair id>"
 block per item; "> " lines are notes for the reviewer, and "[ŞEKİL]" stands for the English item's [asy]
-figure code, which is copied in unchanged. The author reads every item next to the English on the
+figure code, which is copied in unchanged. The author reads items next to the English on the
 "Çeviri inceleme" page; each decision is appended to data/tr_v2/inceleme.jsonl (the latest one per item
-counts), and an approved correction replaces the translation when main_v2 is built.
+counts), and an approved correction replaces the translation when main_v2 is built. Items the author
+approves without reading them get their own decision, "toplu_onay", so that no item is counted as read by
+a person when it was not: the author read the first 45 GSM8K items, found no errors and approved the
+other 155 that way on 2026-10-22.
 """
 
 from __future__ import annotations
@@ -23,7 +26,8 @@ FILES = {"P1": FOLDER / "p1.md", "P2": FOLDER / "p2.md"}
 REVIEWS = FOLDER / "inceleme.jsonl"
 FIGURE = "[ŞEKİL]"   # stands for the [asy] figure code of the English, copied in unchanged
 _FIGURE = re.compile(r"\[asy\].*?\[/asy\]", re.DOTALL)
-STATUSES = ("onay", "duzeltme")
+STATUSES = ("onay", "duzeltme", "toplu_onay")
+READ = ("onay", "duzeltme")   # decisions taken after reading the item; "toplu_onay" is approval unread
 
 
 def read_translations(path: Path) -> dict[str, dict]:
@@ -71,7 +75,8 @@ def load_reviews(path: Path = REVIEWS) -> dict[str, dict]:
 
 def save_review(pair_id: str, status: str, text: str | None = None, comment: str | None = None,
                 path: Path = REVIEWS) -> dict:
-    """Append a decision: "onay" keeps Claude's translation, "duzeltme" replaces it with `text`."""
+    """Append a decision: "onay" keeps Claude's translation, "duzeltme" replaces it with `text`,
+    "toplu_onay" keeps it without the author having read it."""
     if status not in STATUSES:
         raise ValueError(f"bilinmeyen karar: {status}")
     if status == "duzeltme" and not (text or "").strip():

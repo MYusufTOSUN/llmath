@@ -45,6 +45,18 @@ def test_latest_review_counts_and_a_correction_replaces_the_text(tmp_path):
         tv2.save_review("m-p1-0001", "belki", path=path)
 
 
+def test_approval_unread_keeps_the_translation_and_is_marked_in_the_source(tmp_path):
+    path = tmp_path / "inceleme.jsonl"
+    tv2.save_review("m-p2-001", "toplu_onay", path=path)
+    reviews = tv2.load_reviews(path)
+    assert reviews["m-p2-001"]["status"] not in tv2.READ
+    assert tv2.current_text({"pair_id": "m-p2-001", "tr": "Claude'un çevirisi."}, reviews) == "Claude'un çevirisi."
+    unread, read = build_main_v2.source_of("toplu_onay", "GSM8K (openai/gsm8k)"), \
+        build_main_v2.source_of("onay", "GSM8K (openai/gsm8k)")
+    assert "okumadan" in unread and "okuyup" in read and read.endswith("İngilizce asıl: GSM8K (openai/gsm8k)")
+    assert len(build_main_v2.source_of("toplu_onay", "MCLM MT-MATH100 (amphora/MCLM)")) <= 128   # column size
+
+
 def test_all_200_translations_keep_the_numbers_and_formulas_of_the_english():
     items = tv2.load_items()
     assert len(items) == 200 and {i["subset"] for i in items} == {"P1", "P2"}
