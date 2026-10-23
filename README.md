@@ -90,6 +90,21 @@ Yazar çevirileri arayüzün **Çeviri inceleme** sayfasında İngilizceyle yan 
 
 Sonradan ilk turda tarayıcının otomatik çevirisinin açık olduğu anlaşıldı. Bu çeviri sayfanın iki sütununu da değiştiriyordu: İngilizce asıl Türkçe makine çevirisine dönmüş, Türkçe metinde de sözcükler değişmişti. Yazar bu yüzden 23 Ekim 2026'da 200 çevirinin hepsini sıfırdan, tarayıcı çevirisi kapalıyken yeniden incelemeye başladı.
 
+**İkinci tur (23 Ekim 2026, geçerli):** Yazar 200 çevirinin hepsini okudu. 194'ünü olduğu gibi onayladı, 6'sını düzeltti. Yaptığı iki düzeltme Claude'un uyarısı üzerine geri alındı:
+- **m-p2-057:** "nearest tenth of a cent" için yazılan "en yakın onluğa", sorunun cevabını değiştiriyordu (cevap anahtarı 5.4). Çeviri eski hâline döndü.
+- **m-p2-010:** Çıkarılan "zihinden" (in your head) geri kondu.
+
+Kalan 6 düzeltmenin üçü İngilizceden bilerek ayrılıyor:
+- **m-p1-0254 ve m-p1-0536:** "Anne" adı, Türkçedeki "anne" sözcüğüyle karışmasın diye "Max" ve "Ann" oldu.
+- **m-p1-0608:** "Assuming that sales tax is included" cümlesi yazarın kararıyla çevrilmedi. Cevap değişmiyor.
+
+Öteki üç düzeltme yalnızca söyleyişi değiştiriyor:
+- **m-p1-0391:** 5:6 oranı 5/6 diye yazıldı.
+- **m-p1-0490:** "söz verirse" kaldırıldı.
+- **m-p1-0997:** "son durumda" eklendi; bu, cevap anahtarındaki okumayı açık hâle getiriyor.
+
+Gemini'nin metni değişen 4 soruya daha önce verdiği cevaplar silindi ve yeni metinle yeniden soruldu (`check_coverage.py --drop-stale`).
+
 İlk turun kararları `data/tr_v2/inceleme_tur1.jsonl` dosyasında saklanır. Geçerli olan yalnızca `inceleme.jsonl` dosyasındaki kararlardır. İlk turda düzeltilen iki soruda sayfa eski düzeltmeyi not olarak gösterir; yazar düzeltmeyi yeniden yapıp yapmamaya karar verir. `main_v2.jsonl` dosyasının kaynak alanı, her sorunun okunup onaylandığını, okunup düzeltildiğini ya da okunmadan onaylandığını söyler.
 
 Eski Türkçe sonuçlar "makine çevirisi" koşulu olarak saklanır ve bütün modeller yeni Türkçe metinlerle yeniden koşulur. Böylece çeviri kalitesinin Türkçe–İngilizce farkına etkisi ayrıca ölçülebilir.
