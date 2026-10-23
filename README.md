@@ -252,7 +252,16 @@ Etiketleme arayüzün **Hata etiketleme** sayfasından yapılır. Yanlış cevap
 - Sorudaki bir veriyi hiç kullanmamak H8'e girdi.
 - Sorulanı yanlış anlayıp başka bir nicelik hesaplamak H6'ya girdi.
 
-Qwen'in hatalarını Gemini 3.5 Flash-Lite, Gemini'nin hatalarını yerel Qwen3 8B (düşünme açık) etiketliyor. Gemini Flash daha güçlü olsa da ücretsiz katmanda günde yalnız 20 istek verdiği için kullanılmadı. Flash ile Flash-Lite'ın ortak 18 cevaptaki uyumu orta düzeyde (kappa 0,53), yani hakem seçimi etiketleri etkiliyor.
+Qwen'in hatalarını Gemini 3.5 Flash-Lite, Gemini'nin hatalarını yerel Qwen3 8B (düşünme açık) etiketledi. Gemini Flash daha güçlü olsa da ücretsiz katmanda günde yalnız 20 istek verdiği için kullanılmadı. Flash ile Flash-Lite'ın ortak 18 cevaptaki uyumu orta düzeyde (kappa 0,53), yani hakem seçimi etiketleri etkiliyor.
+
+**Hakem düzeni (yazarın kararı, 23 Ekim 2026).** Hakem, etiketlediği modelden daha üst bir seviyeden olmalı. Seviyeler şöyle:
+- yerel 8B modeller;
+- ucuz API modelleri;
+- üst seviye API modelleri.
+
+Bütün hatalar API modelleri eklenince tek bir **ana hakemle**, üst seviye bir modelle etiketlenir. Ana hakemin ailesindeki modelleri ikinci bir üst seviye model etiketler. Böylece modeller arasındaki hata türü farklarına hakem farkı karışmaz. İnsan etiketleri de tek bir hakemin güvenilirliğini ölçer. Üst seviye modelleri ancak başka aileden eşdeğer bir model etiketleyebilir; bu bir sınırlılıktır.
+
+Yukarıdaki etiketler silinmedi. Raporda "zayıf hakem" karşılaştırması için kullanılır, hata türü sonuçları için kullanılmaz. Gemini'nin hatalarını yerel Qwen3'ün etiketlemesi bu kurala zaten aykırıdır.
 
 ## Geri bildirimle düzeltme (`llmath/refine.py`)
 
