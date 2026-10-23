@@ -66,6 +66,13 @@ MODELS: dict[str, ModelSpec] = {
     ]
 }
 
+# Parts of the main set a model is not run on, by the author's decision; the coverage check shows them as out
+# of scope rather than missing. Keys are (model, subset, language).
+OUT_OF_SCOPE = {
+    ("deepseek-r1-8b", "P2", "tr"): "İngilizce MATH'te 80 sorunun 46'sı 7.680 token sınırında kesildi; Türkçe MATH "
+                                    "çoğunlukla bu sınırı ölçerdi (yazarın kararı, 2026-10-23)",
+}
+
 
 def has_api_key(spec: ModelSpec) -> bool:
     return spec.env_key is None or bool(os.getenv(spec.env_key))

@@ -201,7 +201,24 @@ Yeni ayarlarla ölçüm (`dusunen-olcum-3`, 22 Ekim 2026, aynı 20 soru):
 | DeepSeek-R1 8B | 11 → 14 | 0 → 11 | 65 / 63 sn | 6 / 6 |
 | *Karşılaştırma: Qwen3 8B, düşünme kapalı (main-1)* | 17 | 15 | 13 / 5 sn | 2 / 0 |
 
-Tekrar döngüleri büyük ölçüde ortadan kalktı. Phi'nin PoT'si hâlâ çoğunlukla kod üretmiyor. DeepSeek-R1'in uzun düşünmesi bazı MATH sorularında 7.680 token sınırına takılıyor. Bu sürelerle 500 sorunun CoT'si model başına 4–9 saat sürüyor. Ana sette nasıl koşulacağına bu sonuçlara göre karar verilecek.
+Tekrar döngüleri büyük ölçüde ortadan kalktı. Phi'nin PoT'si hâlâ çoğunlukla kod üretmiyor. DeepSeek-R1'in uzun düşünmesi bazı MATH sorularında 7.680 token sınırına takılıyor. Bu sürelerle 500 sorunun CoT'si model başına 4–9 saat sürüyor.
+
+Bu ölçüme göre ana sette üç model de CoT ile koşuldu. Qwen3'ün düşünen hâli ayrıca PoT ile koşuldu. Phi PoT ile koşulmadı, çünkü PoT'si çalışmıyor; bu da bir bulgu olarak raporlanır.
+
+İngilizce ve şablon soruları main-1'de 23 Ekim 2026'da bitti (CoT):
+
+| Model | GSM8K İng. | MATH İng. | Şablon | MATH'te ort. süre | MATH'te kesilen |
+| --- | --- | --- | --- | --- | --- |
+| *Qwen3 8B, düşünme kapalı (karşılaştırma)* | 117/120 | 68/80 | 97/100 | 13 sn | 3 |
+| Qwen3 8B, düşünme açık | 119/120 | 71/80 | 99/100 | 54 sn | 8 |
+| Phi-4-mini-reasoning | 116/120 | 67/80 | 79/100 | 33 sn | 13 |
+| DeepSeek-R1 8B | 108/120 | 34/80 | 89/100 | 89 sn | 46 |
+
+Qwen3'ün düşünen hâli PoT ile 119/120, 67/80 ve 100 şablon sorusunda 89 doğru yaptı.
+
+DeepSeek-R1 8B bu donanımda her alt kümede hem en yavaş hem de en az doğru model oldu. MATH'teki 46 yanlışının hepsi, çıktının 7.680 token sınırında kesilmesinden geliyor. Aynı Qwen3-8B tabanından gelen Qwen3, düşünme kapalıyken MATH'te DeepSeek'ten yaklaşık 7 kat hızlı ve iki kat doğru. Bu sonuç yalnızca DeepSeek-R1'in 8B damıtılmış sürümü ve 8 GB'lık ekran kartı (8.192 token bağlam) için geçerlidir. DeepSeek'in büyük modelleri hakkında bir şey söylemez.
+
+Yazar bu yüzden, Türkçe sonuçları görmeden, DeepSeek'in yeni Türkçe koşusunu GSM8K ile sınırladı (23 Ekim 2026). Türkçe MATH büyük ölçüde token sınırını ölçerdi. Kapsam dışı bırakılan kısım `llmath/config.py` içindeki `OUT_OF_SCOPE` sözlüğündedir. Kapsam denetimi bu kısmı "eksik" değil "kapsam dışı" diye gösterir.
 
 ## Hata etiketleme (`llmath/taxonomy.py`)
 

@@ -114,6 +114,13 @@ def test_an_answer_to_a_text_corrected_later_is_found_and_dropped(source_run):
         assert len(s.scalars(select(Annotation).where(Annotation.response_id.in_([r.id for r in left]))).all()) == 2
 
 
+def test_a_part_left_out_by_decision_is_not_counted_as_missing():
+    assert check_coverage.status("deepseek-r1-8b", "P2-tr", 0, 80) == "kapsam dışı"
+    assert check_coverage.status("deepseek-r1-8b", "P1-tr", 0, 120) == "← eksik"
+    assert check_coverage.status("qwen3-8b", "P2-tr", 79, 80) == "← eksik"
+    assert check_coverage.status("deepseek-r1-8b", "P2-en", 80, 80) == ""
+
+
 def test_coverage_shows_the_new_turkish_still_missing(source_run):
     rows = [json.loads(line) for line in source_run.read_text(encoding="utf-8").splitlines()]
     answered = {("v2t-p1-1-en", "qwen3-8b", "cot"), ("v2t-p3-1", "qwen3-8b", "cot")}

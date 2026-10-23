@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
+from llmath.config import OUT_OF_SCOPE  # noqa: E402
 from llmath.dataset import read_jsonl  # noqa: E402
 from llmath.db import Annotation, Question, Response, Run, SessionLocal  # noqa: E402
 
@@ -39,6 +40,14 @@ def coverage(rows: list[dict], answered: set[tuple[str, str, str]]) -> list[tupl
         for group, ids in sorted(groups.items()):
             table.append((model, strategy, group, len(ids & mine), len(ids)))
     return table
+
+
+def status(model: str, group: str, got: int, expected: int) -> str:
+    """Empty when complete; "kapsam dışı" for a part the model is not run on by decision (OUT_OF_SCOPE)."""
+    subset, lang = group.split("-")
+    if got < expected and (model, subset, lang) in OUT_OF_SCOPE:
+        return "kapsam dışı"
+    return "" if got == expected else "← eksik"
 
 
 def stale_answers(session: Session, run_id: int) -> list[Response]:
@@ -86,9 +95,10 @@ def main() -> None:
     missing = 0
     print(f"{'model':<22}{'strateji':<9}{'grup':<8}cevaplanan/beklenen")
     for model, strategy, group, got, expected in table:
-        flag = "" if got == expected else "  ← eksik"
-        missing += expected - got
-        print(f"{model:<22}{strategy:<9}{group:<8}{got}/{expected}{flag}")
+        flag = status(model, group, got, expected)
+        if flag == "← eksik":
+            missing += expected - got
+        print(f"{model:<22}{strategy:<9}{group:<8}{got}/{expected}  {flag}".rstrip())
     old_counts = Counter(old)
     print(f"\neski çeviriyle verilmiş Türkçe P1/P2 cevabı: {len(old)} {dict(old_counts) if old else ''}")
     print(f"eksik cevap: {missing}")
