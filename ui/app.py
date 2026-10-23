@@ -417,7 +417,8 @@ def page_translation() -> None:
                "Kurallar: yerelleştirme yok (isimler, para birimi ve birimler aslındaki gibi), sayılar Türkçe "
                "yazımla (2,74; 88.000), formüller kaynaktakiyle aynı; [ŞEKİL] kaynaktaki çizimin yeridir. Çeviri "
                "doğruysa onaylayın, değilse Türkçe metni düzeltip kaydedin. Kararlar data/tr_v2/inceleme.jsonl "
-               "dosyasına yazılır; aynı soruya yeniden karar verirseniz son karar geçerli olur.")
+               "dosyasına yazılır; aynı soruya yeniden karar verirseniz son karar geçerli olur. İnceleme 23 Ekim "
+               "2026'da sıfırdan yeniden başladı; ilk turun kararları data/tr_v2/inceleme_tur1.jsonl dosyasında.")
     st.warning("Tarayıcının otomatik çevirisi bu sayfada kapalı olmalı. Açıkken İngilizce asıl makine çevirisiyle "
                "değişir, Türkçe metin de bozulur ve sayfa \"removeChild\" hatası verir.")
     items, reviews = translation_v2.load_items(), translation_v2.load_reviews()
@@ -430,13 +431,18 @@ def page_translation() -> None:
     left, right = st.columns(2)
     subset = left.selectbox("Alt küme", ["(hepsi)", "P1", "P2"], format_func=lambda s: SUBSET_LABELS.get(s, s))
     only_open = right.toggle("Yalnız okunmamış sorular", value=True)
-    pool = [item for item in items if (subset == "(hepsi)" or item["subset"] == subset)
-            and not (only_open and item["pair_id"] in read)]
+    pool = {item["pair_id"]: item for item in items if (subset == "(hepsi)" or item["subset"] == subset)
+            and not (only_open and item["pair_id"] in read)}
     if not pool:
         st.success("Bu seçimde incelenecek soru kalmadı.")
         return
-    item = st.selectbox("Soru", pool, format_func=lambda i: f"{i['pair_id']} · {i['subset']}")
-    pid, review = item["pair_id"], reviews.get(item["pair_id"])
+    ids = list(pool)
+    if st.session_state.get("review_pid") not in pool:
+        st.session_state["review_pid"] = ids[0]
+    pid = st.selectbox("Soru", ids, key="review_pid", format_func=lambda p: f"{p} · {pool[p]['subset']}")
+    item, review = pool[pid], reviews.get(pid)
+    after = ids.index(pid) + 1
+    next_pid = ids[after] if after < len(ids) else None
 
     english, turkish = st.columns(2)
     english.markdown("**İngilizce asıl**")
@@ -453,18 +459,37 @@ def page_translation() -> None:
         decision = {"onay": "onaylandı", "duzeltme": "düzeltildi", "toplu_onay": "okunmadan toplu onaylandı"}
         st.caption(f"Önceki karar: {decision[review['status']]}"
                    + (f" · yorum: {review['comment']}" if review.get("comment") else ""))
+    first = translation_v2.load_reviews(translation_v2.ROUND1).get(pid)
+    if first and first["status"] == "duzeltme":
+        st.info(f"İlk turda bu soruyu şöyle düzeltmiştin: {first['text']}")
 
     text = st.text_area("Türkçe metin (düzeltmek için burada değiştirin; [ŞEKİL] işaretini silmeyin)",
                         value=translation_v2.current_text(item, reviews), height=220, key=f"tr-{pid}")
-    comment = st.text_input("Yorum (isteğe bağlı)", key=f"comment-{pid}")
+    st.text_input("Yorum (isteğe bağlı)", key=f"comment-{pid}")
+    if warning := st.session_state.pop("review_warning", None):
+        st.warning(warning)
     approve, fix = st.columns(2)
-    if approve.button("Onayla", type="primary", disabled=text.strip() != item["tr"].strip(),
-                      help="Claude'un çevirisini olduğu gibi kabul eder"):
-        translation_v2.save_review(pid, "onay", comment=comment)
-        st.rerun()
-    if fix.button("Düzeltmeyi kaydet", disabled=text.strip() == item["tr"].strip()):
-        translation_v2.save_review(pid, "duzeltme", text=text, comment=comment)
-        st.rerun()
+    approve.button("Onayla", type="primary", disabled=text.strip() != item["tr"].strip(),
+                   help="Claude'un çevirisini olduğu gibi kabul eder ve sıradaki soruya geçer",
+                   on_click=_decide, args=(pid, item["tr"], "onay", next_pid))
+    fix.button("Düzeltmeyi kaydet", disabled=text.strip() == item["tr"].strip(),
+               help="Kutudaki metni kaydeder ve sıradaki soruya geçer",
+               on_click=_decide, args=(pid, item["tr"], "duzeltme", next_pid))
+
+
+def _decide(pid: str, original: str, status: str, next_pid: str | None) -> None:
+    """Button callback: saves the decision with the text and comment as they are at the click (an edit the
+    user has not left the box after is included), then shows the next item."""
+    text = st.session_state.get(f"tr-{pid}", original)
+    comment = st.session_state.get(f"comment-{pid}")
+    changed = text.strip() != original.strip()
+    if status == "onay" and changed:
+        st.session_state["review_warning"] = "Metni değiştirdin; değişikliği saklamak için 'Düzeltmeyi kaydet'e bas."
+        return
+    translation_v2.save_review(pid, "duzeltme" if changed else "onay", text=text if changed else None,
+                               comment=comment)
+    if next_pid is not None:
+        st.session_state["review_pid"] = next_pid
 
 
 page = st.sidebar.radio("Sayfa", ["Soru çöz", "Deney sonuçları", "Hata etiketleme", "Çeviri inceleme"])

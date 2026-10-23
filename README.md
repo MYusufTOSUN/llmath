@@ -83,12 +83,14 @@ Bir İngilizce adın Türkçe bir sözcükle karışması gibi zorunlu küçük 
 
 Yazar çevirileri arayüzün **Çeviri inceleme** sayfasında İngilizceyle yan yana okur. Kararları `data/tr_v2/inceleme.jsonl` dosyasına yazılır ve düzeltmeleri yeni veri sürümüne (`data/main_v2.jsonl`) uygulanır. Yeni Türkçe sorular `<çift>-tr2` kimliğini alır.
 
-İnceleme 22 Ekim 2026'da şöyle sonuçlandı:
+**İlk tur (22 Ekim 2026, sonradan geçersiz sayıldı):**
 - **Okunan 45 çeviri:** Yazar ilk 45 GSM8K çevirisini okudu ve anlamı bozan bir hata bulmadı. İki küçük düzeltme yaptı: "Anne" adı "Max" oldu, "5:6" oranı "5/6" diye yazıldı.
-- **Okunmadan onaylanan 155 çeviri:** Kalan 75 GSM8K ve 80 MATH çevirisi okunmadan onaylandı. Bunlar yalnızca otomatik sayı ve formül denetiminden geçti. `inceleme.jsonl` dosyasında `toplu_onay` kararıyla, `main_v2.jsonl` dosyasında kaynak alanında "yazar okumadan toplu onayladı" ifadesiyle işaretlidir.
-- **m-p1-0163:** İngilizce aslı belirsiz olan bu soru sette kaldı. Çevirisi cevap anahtarının okumasını izler.
+- **Okunmadan onaylanan 155 çeviri:** Kalan 75 GSM8K ve 80 MATH çevirisi okunmadan onaylandı (`toplu_onay` kararı).
+- **m-p1-0163:** İngilizce aslı belirsiz olan bu soru onaylandı. Çevirisi cevap anahtarının okumasını izler.
 
-Bu yüzden insan denetimi GSM8K çevirilerinin 45'ini kapsar. MATH çevirilerinin hiçbiri insan tarafından okunmadı.
+Sonradan ilk turda tarayıcının otomatik çevirisinin açık olduğu anlaşıldı. Bu çeviri sayfanın iki sütununu da değiştiriyordu: İngilizce asıl Türkçe makine çevirisine dönmüş, Türkçe metinde de sözcükler değişmişti. Yazar bu yüzden 23 Ekim 2026'da 200 çevirinin hepsini sıfırdan, tarayıcı çevirisi kapalıyken yeniden incelemeye başladı.
+
+İlk turun kararları `data/tr_v2/inceleme_tur1.jsonl` dosyasında saklanır. Geçerli olan yalnızca `inceleme.jsonl` dosyasındaki kararlardır. İlk turda düzeltilen iki soruda sayfa eski düzeltmeyi not olarak gösterir; yazar düzeltmeyi yeniden yapıp yapmamaya karar verir. `main_v2.jsonl` dosyasının kaynak alanı, her sorunun okunup onaylandığını, okunup düzeltildiğini ya da okunmadan onaylandığını söyler.
 
 Eski Türkçe sonuçlar "makine çevirisi" koşulu olarak saklanır ve bütün modeller yeni Türkçe metinlerle yeniden koşulur. Böylece çeviri kalitesinin Türkçe–İngilizce farkına etkisi ayrıca ölçülebilir.
 

@@ -9,6 +9,11 @@ counts), and an approved correction replaces the translation when main_v2 is bui
 approves without reading them get their own decision, "toplu_onay", so that no item is counted as read by
 a person when it was not: the author read the first 45 GSM8K items, found no errors and approved the
 other 155 that way on 2026-10-22.
+
+That first round was then set aside: the browser's automatic translation had been on and altered both
+columns of the page, so the author restarted the review of all 200 items from scratch on 2026-10-23. The
+first round's decisions (and six clicks of the restart day) are kept in inceleme_tur1.jsonl; only the
+decisions in inceleme.jsonl count.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from .dataset import read_jsonl
 FOLDER = DATA_DIR / "tr_v2"
 FILES = {"P1": FOLDER / "p1.md", "P2": FOLDER / "p2.md"}
 REVIEWS = FOLDER / "inceleme.jsonl"
+ROUND1 = FOLDER / "inceleme_tur1.jsonl"   # the set-aside first round, kept for the record
 FIGURE = "[ŞEKİL]"   # stands for the [asy] figure code of the English, copied in unchanged
 _FIGURE = re.compile(r"\[asy\].*?\[/asy\]", re.DOTALL)
 STATUSES = ("onay", "duzeltme", "toplu_onay")
