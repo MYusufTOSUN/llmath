@@ -147,6 +147,25 @@ Ana setin 500 sorusu Qwen3 8B (yerel) ve Gemini 3.5 Flash-Lite (ücretsiz API) i
 
 Ayrıntılı tablolar `python scripts/report.py --name main-1 --cascade qwen3-8b gemini-flash-lite --out outputs/main-1.md` ile üretilir.
 
+## Ana deney, yeni çeviriyle (main-2)
+
+main-2'nin veri dosyası `data/main_v2.jsonl`, Türkçe metinleri yeni çeviriden geliyor. İngilizce ve şablon soruları main-1 ile aynı olduğu için bu soruların cevapları main-1'den kopyalandı. 200 yeni Türkçe soruyu bütün modeller yeniden çözdü (26 Ekim 2026'da bitti). Toplam 4.920 cevap var. Kapsam denetiminde eksik cevap, eski çeviriyle verilmiş cevap ve sonradan değişen metne verilmiş cevap yok. DeepSeek-R1'in Türkçe MATH'i kararla kapsam dışında.
+
+| Model | CoT | PoT |
+| --- | --- | --- |
+| Gemini 3.5 Flash-Lite | %97,0 (485/500) | %91,6 (458/500) |
+| Qwen3 8B, düşünme açık | %95,4 (477/500) | %90,2 (451/500) |
+| Qwen3 8B | %90,0 (450/500) | %78,0 (390/500) |
+| Phi-4-mini-reasoning | %80,2 (401/500) | — |
+| DeepSeek-R1 8B (Türkçe MATH hariç) | %78,3 (329/420) | — |
+| Llama 3.1 8B | %52,0 (260/500) | %50,8 (254/500) |
+
+- **Türkçe açığı çeviriden kaynaklanmıyor.** Eski makine çevirisiyle yeni çeviri aynı sorularda karşılaştırıldı. Gemini, Qwen3 8B ve Llama'nın 12 model–strateji–alt küme karşılaştırmasının hiçbirinde anlamlı fark çıkmadı (en küçük p = 0,077; Gemini PoT MATH'te 62'den 70'e çıktı). Tek tek sorularda cevaplar sık değişiyor: örneğin Llama PoT GSM8K'da 25 soru yalnız eski çeviride, 21 soru yalnız yenide doğru. Ama değişimler birbirini götürüyor.
+- **Küçük modellerde Türkçe açığı yeni çeviriyle de sürüyor.** Qwen3 8B'de açık −7,5 ile −11,2 puan arasında; dört karşılaştırmanın üçünde anlamlı. Llama'da −15 ile −28 puan, Phi'de GSM8K'da −25,8 ve MATH'te −16,2 puan. DeepSeek-R1'de GSM8K'da −8,3 puan. Bu farkların hepsi anlamlı.
+- **Düşünme modu açığı kapatıyor.** Qwen3 8B düşünme açıkken CoT'ta Türkçe ile İngilizce arasında neredeyse fark yok: GSM8K'da −1,7, MATH'te 0 puan, ikisi de anlamsız. Aynı model düşünme kapalıyken −7,5 ve −10 puan geride. Gemini'de de dört karşılaştırmanın hiçbiri anlamlı değil.
+
+Ayrıntılı tablolar `python scripts/report.py --name main-2 --out outputs/main-2.md` ile, eski ve yeni çevirinin karşılaştırması `python scripts/compare_translations.py` ile üretilir (`outputs/ceviri-karsilastirma.md`). Hata türleri, API modelleri eklendikten sonra tek ana hakemle etiketlenecek (bkz. Hata etiketleme).
+
 ## Sayı yazımı deneyi (`data/number_format_v1.jsonl`, 80 öğe)
 
 main-1'de iki model de PoT'ta Türkçe ondalık virgülü yanlış okudu. Bu deney hatanın ne kadar yaygın olduğunu ve istemle ilgisini ölçer. Set 40 Türkçe–İngilizce soru çiftinden oluşur (8 şablon × 5). Bir çiftin iki sorusunda sayılar ve cevap aynıdır, yalnız dil ve sayı yazımı değişir. D1'deki 30 çiftte ondalık sayılar (Türkçe 8,4; İngilizce 8.4), D2'deki 10 çiftte binlik ayırıcılı büyük sayılar (Türkçe 12.450; İngilizce 12,450) vardır. Cevaplar SymPy ile hesaplanır ve en fazla iki ondalık basamaklıdır; böylece kuruşa yuvarlayan bir model yanlış sayılmaz.
